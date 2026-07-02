@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include fclists *.css
+recursive-include fclists *.csv
+recursive-include fclists *.html
+recursive-include fclists *.ico
+recursive-include fclists *.js
+recursive-include fclists *.json
+recursive-include fclists *.md
+recursive-include fclists *.png
+recursive-include fclists *.py
+recursive-include fclists *.svg
+recursive-include fclists *.txt
+recursive-exclude fclists *.pyc

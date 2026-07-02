@@ -1,0 +1,64 @@
+[
+ {
+  "doctype": "Number Card",
+  "name": "FClist Items Below Reorder",
+  "label": "Items Below Reorder",
+  "module": "FCLists",
+  "type": "Report",
+  "report_name": "FClist Reorder",
+  "report_field": "item_code",
+  "report_function": "Count",
+  "function": "Count",
+  "aggregate_function_based_on": "",
+  "is_public": 1,
+  "show_percentage_stats": 0,
+  "color": "#C62828",
+  "filters_json": "{}",
+  "dynamic_filters_json": "{}",
+  "roles": [
+   {"role": "System Manager"},
+   {"role": "Stock Manager"},
+   {"role": "Stock User"}
+  ]
+ },
+ {
+  "doctype": "Number Card",
+  "name": "FClist Batches Expiring 30d",
+  "label": "Batches Expiring <=30d",
+  "module": "FCLists",
+  "type": "Document Type",
+  "document_type": "Batch",
+  "function": "Count",
+  "aggregate_function_based_on": "",
+  "is_public": 1,
+  "show_percentage_stats": 0,
+  "color": "#EF6C00",
+  "filters_json": "[[\"Batch\",\"disabled\",\"=\",0],[\"Batch\",\"expiry_date\",\"is\",\"set\"]]",
+  "dynamic_filters_json": "[[\"Batch\",\"expiry_date\",\">=\",\"frappe.datetime.get_today()\"],[\"Batch\",\"expiry_date\",\"<=\",\"frappe.datetime.add_days(frappe.datetime.get_today(), 30)\"]]",
+  "roles": [
+   {"role": "System Manager"},
+   {"role": "Stock Manager"},
+   {"role": "Stock User"}
+  ]
+ },
+ {
+  "doctype": "Number Card",
+  "name": "FClist Overdue Invoices",
+  "label": "Overdue Invoices",
+  "module": "FCLists",
+  "type": "Document Type",
+  "document_type": "Sales Invoice",
+  "function": "Count",
+  "aggregate_function_based_on": "",
+  "is_public": 1,
+  "show_percentage_stats": 0,
+  "color": "#C62828",
+  "filters_json": "[[\"Sales Invoice\",\"docstatus\",\"=\",1],[\"Sales Invoice\",\"outstanding_amount\",\">\",0]]",
+  "dynamic_filters_json": "[[\"Sales Invoice\",\"due_date\",\"<\",\"frappe.datetime.get_today()\"]]",
+  "roles": [
+   {"role": "System Manager"},
+   {"role": "Accounts Manager"},
+   {"role": "Accounts User"}
+  ]
+ }
+]

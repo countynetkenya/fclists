@@ -1,0 +1,135 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div class="container my-4" style="max-width: 820px;">
+
+  <h1>FCLists — User Guide</h1>
+  <p class="lead">FCLists adds the dense, computed lists a plain Frappe List View can't give you: live
+  on-hand stock, reorder gaps, batch expiry, and QuickBooks-POS-style sales / payment histories. Every
+  one is a native ERPNext Script Report over your own data — nothing is stored twice, and each report
+  obeys the permissions you already have.</p>
+
+  <div class="alert alert-info">
+    <strong>You see a report only if you already hold the role for it.</strong> FCLists creates
+    <em>no</em> new roles. The stock boards want a <strong>Stock</strong> role (Stock User / Stock
+    Manager); the transaction histories want an <strong>Accounts</strong> role (Accounts User / Accounts
+    Manager). If a report isn't in your report list, you're missing its native role — ask your admin.
+  </div>
+
+  <h2>1. "I want to do X" &rarr; open this list</h2>
+  <p>Reach any of these from <strong>Reports</strong> (search the report name in the awesomebar), or from
+  the <strong>jump button</strong> FCLists adds to the matching desk List View (see &sect;3).</p>
+
+  <table class="table table-bordered">
+    <thead><tr><th>You want to&hellip;</th><th>Open</th><th>Which gives you</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>See what's actually on the shelf, its cost, its price and its margin</td>
+        <td><strong>FClist Item Stock</strong></td>
+        <td>Per item: on-hand qty (summed across warehouses), valuation, selling price, margin &amp;
+          margin%, reorder level, and units sold in the last N days (velocity).</td>
+      </tr>
+      <tr>
+        <td>Know what to re-order before you run out</td>
+        <td><strong>FClist Reorder</strong></td>
+        <td>Only items whose on-hand has fallen to or below their reorder level, with the shortfall and
+          the default supplier.</td>
+      </tr>
+      <tr>
+        <td>Clear near-expiry stock first (FEFO)</td>
+        <td><strong>FClist Batch Expiry</strong></td>
+        <td>Every batch with an expiry date, sorted earliest-first: days-to-expiry, qty remaining, and an
+          Expired / Expiring / OK status flag.</td>
+      </tr>
+      <tr>
+        <td>See exactly what moved in and out of stock</td>
+        <td><strong>FClist Stock Movement</strong></td>
+        <td>Recent Stock Ledger moves with the signed qty split into clear <em>in</em> / <em>out</em>
+          columns, plus the voucher that caused each one.</td>
+      </tr>
+      <tr>
+        <td>Reprint or look up a sale (end-of-day register)</td>
+        <td><strong>FClist Sales History</strong></td>
+        <td>A chronological register of every sales receipt with a link to open/print it, filterable by
+          date, customer and the cashier who rang it.</td>
+      </tr>
+      <tr>
+        <td>See which invoices are still owed / overdue</td>
+        <td><strong>FClist Sales Invoice</strong></td>
+        <td>Every sales invoice with total, outstanding, status and a computed <em>Overdue</em> flag
+          (past due date and still owing).</td>
+      </tr>
+      <tr>
+        <td>Reconcile a till's takings by tender</td>
+        <td><strong>FClist POS Invoice</strong></td>
+        <td>Every POS receipt with its payment split (e.g. Cash: 500, M-Pesa: 1200) and a return flag.</td>
+      </tr>
+      <tr>
+        <td>Audit refunds / credit notes</td>
+        <td><strong>FClist Returns</strong></td>
+        <td>Every return (credit note): date, customer, the invoice it was returned against, and amount.</td>
+      </tr>
+      <tr>
+        <td>Match the day's collections to the bank / M-Pesa statement</td>
+        <td><strong>FClist Payments</strong></td>
+        <td>Every incoming payment: party, amount, mode of payment, and the bank / M-Pesa reference.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. Filter, then read</h2>
+  <p>Each report opens with sensible filters at the top — a date range, a customer, an item, a warehouse,
+  or a "last N days" window, depending on the report. Set them and the table refreshes. Two habits worth
+  keeping:</p>
+  <ul>
+    <li><strong>Narrow the date range first.</strong> The transaction histories default to a recent window
+      so they stay fast; widen it only when you need older records.</li>
+    <li><strong>Export from the report menu</strong> (the <code>&#8942;</code> menu &rarr; Export) when you
+      want the numbers in a spreadsheet. FCLists doesn't rebuild export — it's the native desk feature.</li>
+  </ul>
+
+  <h2>3. The jump buttons on your List Views</h2>
+  <p>FCLists also enriches four built-in desk List Views. Open one and you'll find an extra button that
+  takes you straight to the matching dense board — no need to hunt for the report:</p>
+  <table class="table table-bordered">
+    <thead><tr><th>On this List View</th><th>You get</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Item</strong></td><td>A <em>Disabled</em> indicator + a <strong>Stock Board</strong>
+        button &rarr; FClist Item Stock.</td></tr>
+      <tr><td><strong>Batch</strong></td><td>Expired / Expiring colour indicators + an
+        <strong>Expiry Board</strong> button &rarr; FClist Batch Expiry.</td></tr>
+      <tr><td><strong>Sales Invoice</strong></td><td>Overdue / Unpaid indicators + a
+        <strong>Sales History</strong> button &rarr; FClist Sales History.</td></tr>
+      <tr><td><strong>POS Invoice</strong></td><td>A <em>Return</em> indicator + a <strong>POS Board</strong>
+        button &rarr; FClist POS Invoice.</td></tr>
+    </tbody>
+  </table>
+  <p>These additions are <em>on top of</em> whatever ERPNext already shows on those lists — FCLists extends
+  the native list settings, it never replaces them, so nothing you had before is lost.</p>
+
+  <h2>4. Why the numbers are always live (and always yours)</h2>
+  <ul>
+    <li><strong>Computed, not copied.</strong> On-hand qty, margin, days-to-expiry and tender splits are
+      calculated from your native tables (Bin, Stock Ledger Entry, Batch, the invoice payment rows) each
+      time you run the report — never from a second copy that could drift.</li>
+    <li><strong>Your permissions apply automatically.</strong> The reports read through the ORM, so any
+      <em>User Permissions</em> you have (e.g. restricted to one warehouse or company) filter the rows for
+      you without any extra setup.</li>
+    <li><strong>Role-gated, never public.</strong> Each report is limited to its native roles, so a report
+      never shows figures to someone who couldn't already see them in ERPNext.</li>
+  </ul>
+
+  <h2>5. If a report is empty or missing</h2>
+  <ul>
+    <li><strong>Missing from your report list?</strong> You don't hold its native role. Stock boards need a
+      Stock role; histories need an Accounts role. Ask your admin to grant it.</li>
+    <li><strong>Runs but shows nothing?</strong> Your filters (usually the date range or warehouse) exclude
+      everything, or your User Permissions restrict you to records that have no matching data. Widen the
+      date range or clear a filter.</li>
+    <li><strong>Whole app quiet?</strong> An admin can switch FCLists off per-site with
+      <code>fclists_enabled: false</code> in <code>site_config.json</code> (it defaults to on). If every
+      report is empty, check that flag first.</li>
+  </ul>
+
+</div>
+{% endblock %}

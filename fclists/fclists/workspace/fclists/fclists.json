@@ -1,0 +1,51 @@
+{
+ "app": "fclists",
+ "charts": [],
+ "content": "[{\"id\": \"hdr\", \"type\": \"header\", \"data\": {\"text\": \"<h3>FCLists \\u2014 dense computed lists + transaction histories</h3>\", \"col\": 12}}, {\"id\": \"nc_reorder\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"FClist Items Below Reorder\", \"col\": 4}}, {\"id\": \"nc_expiry\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"FClist Batches Expiring 30d\", \"col\": 4}}, {\"id\": \"nc_overdue\", \"type\": \"number_card\", \"data\": {\"number_card_name\": \"FClist Overdue Invoices\", \"col\": 4}}, {\"id\": \"hdr_inventory\", \"type\": \"header\", \"data\": {\"text\": \"<h4>Inventory</h4>\", \"col\": 12}}, {\"id\": \"sc_item_stock\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Item Stock\", \"col\": 3}}, {\"id\": \"sc_reorder\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Reorder\", \"col\": 3}}, {\"id\": \"sc_batch_expiry\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Batch Expiry\", \"col\": 3}}, {\"id\": \"sc_stock_movement\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Stock Movement\", \"col\": 3}}, {\"id\": \"hdr_sales\", \"type\": \"header\", \"data\": {\"text\": \"<h4>Sales &amp; History</h4>\", \"col\": 12}}, {\"id\": \"sc_sales_invoice\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Sales Invoice\", \"col\": 3}}, {\"id\": \"sc_pos_invoice\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist POS Invoice\", \"col\": 3}}, {\"id\": \"sc_sales_history\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Sales History\", \"col\": 3}}, {\"id\": \"sc_returns\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Returns\", \"col\": 3}}, {\"id\": \"sc_payments\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"FClist Payments\", \"col\": 3}}]",
+ "creation": "2026-07-02 00:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "hide_custom": 0,
+ "icon": "list-alt",
+ "idx": 0,
+ "indicator_color": "green",
+ "is_hidden": 0,
+ "label": "FCLists",
+ "link_type": "DocType",
+ "links": [],
+ "modified": "2026-07-02 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCLists",
+ "name": "FCLists",
+ "number_cards": [
+  {"label": "FClist Items Below Reorder", "number_card_name": "FClist Items Below Reorder"},
+  {"label": "FClist Batches Expiring 30d", "number_card_name": "FClist Batches Expiring 30d"},
+  {"label": "FClist Overdue Invoices", "number_card_name": "FClist Overdue Invoices"}
+ ],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Stock Manager"},
+  {"role": "Stock User"},
+  {"role": "Accounts Manager"},
+  {"role": "Accounts User"}
+ ],
+ "sequence_id": 51.0,
+ "shortcuts": [
+  {"color": "Green", "doc_view": "", "label": "FClist Item Stock", "link_to": "FClist Item Stock", "type": "Report"},
+  {"color": "Green", "doc_view": "", "label": "FClist Reorder", "link_to": "FClist Reorder", "type": "Report"},
+  {"color": "Green", "doc_view": "", "label": "FClist Batch Expiry", "link_to": "FClist Batch Expiry", "type": "Report"},
+  {"color": "Green", "doc_view": "", "label": "FClist Stock Movement", "link_to": "FClist Stock Movement", "type": "Report"},
+  {"color": "Blue", "doc_view": "", "label": "FClist Sales Invoice", "link_to": "FClist Sales Invoice", "type": "Report"},
+  {"color": "Blue", "doc_view": "", "label": "FClist POS Invoice", "link_to": "FClist POS Invoice", "type": "Report"},
+  {"color": "Blue", "doc_view": "", "label": "FClist Sales History", "link_to": "FClist Sales History", "type": "Report"},
+  {"color": "Blue", "doc_view": "", "label": "FClist Returns", "link_to": "FClist Returns", "type": "Report"},
+  {"color": "Blue", "doc_view": "", "label": "FClist Payments", "link_to": "FClist Payments", "type": "Report"}
+ ],
+ "title": "FCLists",
+ "type": "Workspace"
+}
