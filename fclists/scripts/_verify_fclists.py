@@ -61,6 +61,26 @@ def _read(path):
 		return None
 
 
+def _strip_js_comments(src):
+	"""Drop full-line `//`, `/* */` and JSDoc `*` comment lines so the anti-pattern check scans CODE
+	only. Our list_js files reference the bare `frappe.listview_settings["X"] = {` string inside warning
+	comments; without this, that comment triggers a false-red on an otherwise-compliant file."""
+	out, in_block = [], False
+	for line in (src or "").splitlines():
+		s = line.strip()
+		if in_block:
+			if "*/" in s:
+				in_block = False
+			continue
+		if s.startswith("/*"):
+			in_block = "*/" not in s
+			continue
+		if s.startswith("//") or s.startswith("*"):
+			continue
+		out.append(line)
+	return "\n".join(out)
+
+
 def run():
 	checks = []
 
@@ -100,7 +120,8 @@ def run():
 		record(f"list_js:extends:{doctype}", uses_helper, "uses fclists.extend_listview(")
 
 		# A bare `frappe.listview_settings["X"] = {` (or ['X'] = {) reassignment clobbers native config.
-		bare = re.search(r"frappe\.listview_settings\s*\[[^\]]+\]\s*=\s*\{", src)
+		# Scan CODE ONLY — the files name the anti-pattern in warning comments (would false-red otherwise).
+		bare = re.search(r"frappe\.listview_settings\s*\[[^\]]+\]\s*=\s*\{", _strip_js_comments(src))
 		record(f"list_js:no_bare_assign:{doctype}", bare is None,
 			"no bare listview_settings[...] = {" if bare is None else f"BARE assignment: {bare.group(0)}")
 
