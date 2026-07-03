@@ -1,0 +1,38 @@
+[
+ {
+  "doctype": "Dashboard Chart",
+  "name": "FClist Sales Trend",
+  "chart_name": "FClist Sales Trend",
+  "chart_type": "Sum",
+  "document_type": "Sales Invoice",
+  "based_on": "posting_date",
+  "value_based_on": "grand_total",
+  "group_by_type": "Count",
+  "timeseries": 1,
+  "timespan": "Last Year",
+  "time_interval": "Monthly",
+  "number_of_groups": 0,
+  "is_public": 1,
+  "type": "Line",
+  "filters_json": "[[\"Sales Invoice\",\"docstatus\",\"=\",1]]",
+  "color": "#2E7D32",
+  "module": "FCLists"
+ },
+ {
+  "doctype": "Dashboard Chart",
+  "name": "FClist Top Customers",
+  "chart_name": "FClist Top Customers",
+  "chart_type": "Group By",
+  "document_type": "Sales Invoice",
+  "group_by_type": "Sum",
+  "group_by_based_on": "customer",
+  "aggregate_function_based_on": "grand_total",
+  "number_of_groups": 10,
+  "timeseries": 0,
+  "is_public": 1,
+  "type": "Bar",
+  "filters_json": "[[\"Sales Invoice\",\"docstatus\",\"=\",1]]",
+  "color": "#1565C0",
+  "module": "FCLists"
+ }
+]

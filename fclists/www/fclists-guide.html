@@ -5,9 +5,11 @@
 
   <h1>FCLists — User Guide</h1>
   <p class="lead">FCLists adds the dense, computed lists a plain Frappe List View can't give you: live
-  on-hand stock, reorder gaps, batch expiry, and QuickBooks-POS-style sales / payment histories. Every
-  one is a native ERPNext Script Report over your own data — nothing is stored twice, and each report
-  obeys the permissions you already have.</p>
+  on-hand stock, reorder gaps, batch expiry, QuickBooks-POS-style sales / payment histories, AR &amp; AP
+  balances, aging buckets, live account balances and best-seller rankings — plus a ready-made
+  <strong>dashboard, charts and KPI cards</strong> the moment you install it. Every report is a native
+  ERPNext Script Report over your own data, and the dashboard is built on plain frappe dashboards — nothing
+  is stored twice, no extra BI tool is needed, and each one obeys the permissions you already have.</p>
 
   <div class="alert alert-info">
     <strong>You see a report only if you already hold the role for it.</strong> FCLists creates
@@ -74,6 +76,71 @@
         <td><strong>FClist Payments</strong></td>
         <td>Every incoming payment: party, amount, mode of payment, and the bank / M-Pesa reference.</td>
       </tr>
+      <tr><td colspan="3" class="text-muted"><strong>Money owed — AR &amp; AP</strong></td></tr>
+      <tr>
+        <td>See what each customer owes you, at a glance</td>
+        <td><strong>FClist Customer Balance</strong></td>
+        <td>One row per customer: outstanding, credit limit, available credit and the past-due portion —
+          the QuickBooks 3-field AR glance, computed live from submitted sales invoices.</td>
+      </tr>
+      <tr>
+        <td>See what you owe each supplier</td>
+        <td><strong>FClist Supplier Balance</strong></td>
+        <td>The AP mirror: per supplier, total outstanding and the past-due portion, from submitted
+          purchase invoices.</td>
+      </tr>
+      <tr>
+        <td>Work a collections list by how overdue each invoice is</td>
+        <td><strong>FClist Open Invoices</strong></td>
+        <td>Every unpaid sales invoice tagged with its aging bucket (Current, 1-30, 31-60, 61-90, 90+) and
+          the number of days past due.</td>
+      </tr>
+      <tr>
+        <td>Review purchase bills the way you review sales invoices</td>
+        <td><strong>FClist Purchase Invoice</strong></td>
+        <td>Every purchase invoice with total, outstanding, status and a computed <em>Overdue</em> flag.</td>
+      </tr>
+      <tr><td colspan="3" class="text-muted"><strong>Finance — ledger, accounts, reconciliation</strong></td></tr>
+      <tr>
+        <td>See the whole chart of accounts with live balances</td>
+        <td><strong>FClist Account</strong></td>
+        <td>Every account with its type, root type, group flag and a <em>live balance</em> as of a date
+          (summed from the ledger).</td>
+      </tr>
+      <tr>
+        <td>Scroll the general ledger, newest first</td>
+        <td><strong>FClist GL</strong></td>
+        <td>The QuickBooks-style ledger scroll: posting date, account, debit/credit, voucher, party and
+          remarks — filterable by account, party and date.</td>
+      </tr>
+      <tr>
+        <td>Clear deposits &amp; withdrawals still awaiting reconciliation</td>
+        <td><strong>FClist Bank Reconciliation Queue</strong></td>
+        <td>Every submitted payment not yet cleared (the "For Review" queue) — works for bank and
+          mobile-money alike.</td>
+      </tr>
+      <tr><td colspan="3" class="text-muted"><strong>What's selling — best-sellers &amp; breakdowns</strong></td></tr>
+      <tr>
+        <td>Know your best-sellers / fastest movers over a window</td>
+        <td><strong>FClist Best Sellers</strong></td>
+        <td>Top items ranked by units sold (velocity = sales-rank): rank, qty sold, revenue and margin.</td>
+      </tr>
+      <tr>
+        <td>See how much each cashier rang up</td>
+        <td><strong>FClist Sales by Cashier</strong></td>
+        <td>Sales grouped by the person who created each invoice: invoice count, total and average sale.</td>
+      </tr>
+      <tr>
+        <td>Break sales down by department (item group)</td>
+        <td><strong>FClist Sales by Department</strong></td>
+        <td>Per item group: qty, revenue and its share-% of total revenue.</td>
+      </tr>
+      <tr>
+        <td>Compare this year's sales to last year (Today / WTD / MTD / YTD)</td>
+        <td><strong>FClist Sales YoY</strong></td>
+        <td>The QuickBooks dashboard glance: each period this year vs the same period last year, with the
+          % change.</td>
+      </tr>
     </tbody>
   </table>
 
@@ -89,7 +156,7 @@
   </ul>
 
   <h2>3. The jump buttons on your List Views</h2>
-  <p>FCLists also enriches four built-in desk List Views. Open one and you'll find an extra button that
+  <p>FCLists also enriches eight built-in desk List Views. Open one and you'll find an extra button that
   takes you straight to the matching dense board — no need to hunt for the report:</p>
   <table class="table table-bordered">
     <thead><tr><th>On this List View</th><th>You get</th></tr></thead>
@@ -102,12 +169,52 @@
         <strong>Sales History</strong> button &rarr; FClist Sales History.</td></tr>
       <tr><td><strong>POS Invoice</strong></td><td>A <em>Return</em> indicator + a <strong>POS Board</strong>
         button &rarr; FClist POS Invoice.</td></tr>
+      <tr><td><strong>Customer</strong></td><td>A <em>Disabled</em> indicator + an <strong>AR Board</strong>
+        button &rarr; FClist Customer Balance.</td></tr>
+      <tr><td><strong>Supplier</strong></td><td>On Hold / Disabled indicators + an <strong>AP Board</strong>
+        button &rarr; FClist Supplier Balance.</td></tr>
+      <tr><td><strong>Purchase Invoice</strong></td><td>Overdue / Unpaid indicators + a
+        <strong>Purchase Board</strong> button &rarr; FClist Purchase Invoice.</td></tr>
+      <tr><td><strong>Account</strong></td><td>Group / root-type indicators + a <strong>Balances</strong>
+        button &rarr; FClist Account.</td></tr>
     </tbody>
   </table>
   <p>These additions are <em>on top of</em> whatever ERPNext already shows on those lists — FCLists extends
   the native list settings, it never replaces them, so nothing you had before is lost.</p>
 
-  <h2>4. Why the numbers are always live (and always yours)</h2>
+  <h2>4. Your dashboard, charts and KPI cards</h2>
+  <p>FCLists installs a ready-made <strong>dashboard</strong> so you get an at-a-glance overview the moment
+  the app goes on — <strong>no Frappe Insights or other BI tool needed.</strong> It's all built on the plain
+  frappe dashboard, chart and number-card features every ERPNext site already has.</p>
+  <table class="table table-bordered">
+    <thead><tr><th>You want to&hellip;</th><th>Open / add</th><th>Which gives you</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>See the whole picture in one screen</td>
+        <td>Dashboard &rarr; <strong>FCLists BI</strong></td>
+        <td>A pre-built dashboard laying out the sales trend, top customers, and the KPI cards below. Set
+          it as your home dashboard or pin it.</td>
+      </tr>
+      <tr>
+        <td>Watch the sales trend / your biggest customers</td>
+        <td>Charts <strong>FClist Sales Trend</strong>, <strong>FClist Top Customers</strong></td>
+        <td>A monthly sales line over the last year, and a bar chart of your ten highest-billed customers.</td>
+      </tr>
+      <tr>
+        <td>Keep a KPI in the corner of your eye</td>
+        <td>Number Cards (add to any workspace)</td>
+        <td>Five one-number glances: <em>Items Below Reorder</em>, <em>Batches Expiring &le;30d</em>,
+          <em>Overdue Invoices</em>, <em>Total Sales MTD</em> and <em>Overdue AR</em>.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>The cards and charts are role-safe: the stock cards want a Stock role, the money cards want an Accounts
+  role, so a card never shows a figure to someone who couldn't already see it. To place a card, open a
+  Workspace or Dashboard, choose <em>Edit</em> &rarr; <em>Add Card</em>, and pick any card named
+  <code>FClist&hellip;</code>. If you also run Frappe Insights, these same lists make a natural data source —
+  but FCLists works fully without it.</p>
+
+  <h2>5. Why the numbers are always live (and always yours)</h2>
   <ul>
     <li><strong>Computed, not copied.</strong> On-hand qty, margin, days-to-expiry and tender splits are
       calculated from your native tables (Bin, Stock Ledger Entry, Batch, the invoice payment rows) each
@@ -119,7 +226,7 @@
       never shows figures to someone who couldn't already see them in ERPNext.</li>
   </ul>
 
-  <h2>5. If a report is empty or missing</h2>
+  <h2>6. If a report is empty or missing</h2>
   <ul>
     <li><strong>Missing from your report list?</strong> You don't hold its native role. Stock boards need a
       Stock role; histories need an Accounts role. Ask your admin to grant it.</li>

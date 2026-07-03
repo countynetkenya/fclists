@@ -9,9 +9,12 @@ sector-neutral + config-not-fork + upgrade-safe. Four families of checks:
       assignment clobbers ERPNext's native config for the doctype).
   (2) LOADER PRIMITIVE — public/js/fclists_lib.js exists and DEFINES `fclists.extend_listview` (the merge
       -and-chain helper that (1) depends on).
-  (3) REPORT SECURITY + EXECUTION (Finding B) — every Wave-1 report exists as a Script Report with a
-      ref_doctype, is ROLE-GATED (non-empty roles — never world-readable), and actually EXECUTES + renders
-      through frappe's own runner `frappe.desk.query_report.run` (the identical path CSV/print export use).
+  (3) REPORT SECURITY + EXECUTION (Finding B) — every Wave-1 AND Wave-2 report exists as a Script Report
+      with a ref_doctype, is ROLE-GATED (non-empty roles — never world-readable), and actually EXECUTES +
+      renders through frappe's own runner `frappe.desk.query_report.run` (the same path CSV/print export use).
+  (3b) BI FIXTURES — every fclists BI fixture (Dashboard / Dashboard Chart / Number Card) is present, parses,
+      ships only FClist-prefixed rows, and references NO Frappe Insights / foreign BI app (BI is built on
+      NATIVE frappe core doctypes only; Insights may be LINKED at runtime but is NEVER required).
   (4) DEPENDENCY HYGIENE — required_apps == ["erpnext"] EXACTLY, and NO fclists source file imports
       flowcore / fcduka / titan_mpsa / titan / settle / leanorg (grep the whole tree).
 
@@ -21,6 +24,7 @@ check, a rolled-up "N/N", and a final "all_ok: true/false".
 Run:  bench --site group.localhost execute fclists.scripts._verify_fclists.run
 """
 
+import json
 import os
 import re
 
@@ -28,7 +32,7 @@ import frappe
 from frappe.desk.query_report import run as run_report
 
 # Wave-1 reports, referenced by DISPLAY NAME (exactly as declared in each report JSON's report_name).
-REPORTS = [
+WAVE1_REPORTS = [
 	"FClist Item Stock",
 	"FClist Reorder",
 	"FClist Batch Expiry",
@@ -39,6 +43,43 @@ REPORTS = [
 	"FClist Returns",
 	"FClist Payments",
 ]
+
+# Wave-2 reports (D-042 parity sweep continuation), referenced by DISPLAY NAME. Same contract as Wave-1:
+# each is a role-gated Script Report over NATIVE erpnext doctypes and must EXECUTE through the real runner.
+WAVE2_REPORTS = [
+	"FClist Best Sellers",
+	"FClist Sales by Cashier",
+	"FClist Sales by Department",
+	"FClist Sales YoY",
+	"FClist Customer Balance",
+	"FClist Open Invoices",
+	"FClist Supplier Balance",
+	"FClist Purchase Invoice",
+	"FClist Account",
+	"FClist GL",
+	"FClist Bank Reconciliation Queue",
+]
+
+# All reports the verifier gates (Wave-1 + Wave-2). Existence / role-gating / execution apply to every one.
+REPORTS = WAVE1_REPORTS + WAVE2_REPORTS
+
+# Wave-2 list-JS doctypes that MUST be declared in fclists.hooks.doctype_list_js (each resolves to a
+# *_list.js that EXTENDS native via fclists.extend_listview() — proven by the generic wiring loop below).
+WAVE2_LIST_JS_DOCTYPES = ["Customer", "Supplier", "Purchase Invoice", "Account"]
+
+# fclists BI fixtures (NATIVE frappe core doctypes only). Each fixture file must be present, parse as JSON,
+# and reference NO Frappe Insights / foreign-BI app. document_type / based_on stay on native erpnext/frappe
+# doctypes. Keyed by the fixture file under fclists/fclists/fixtures/.
+BI_FIXTURE_FILES = {
+	"Dashboard": "dashboard.json",
+	"Dashboard Chart": "dashboard_chart.json",
+	"Number Card": "number_card.json",
+}
+
+# BI must be built on frappe/erpnext core only — any reference to these BI apps (as a document_type, an
+# import, or a stringy token in the fixture JSON) fails the "no foreign BI app" gate. Insights may be LINKED
+# at runtime but NEVER required, and our shipped fixtures must not hard-reference it.
+FORBIDDEN_BI_TOKENS = ["insights", "Insights", "frappe_insights", "posthog", "metabase", "superset"]
 
 # Apps that fclists must NEVER import or depend on (single-owner / config-not-fork law). erpnext is the
 # only permitted dependency. Matched as `import X` / `from X` and dotted-attribute use `X.` in source.
@@ -107,6 +148,12 @@ def run():
 
 	record("list_js:entries_present", len(list_js_map) > 0, f"{len(list_js_map)} doctype_list_js entries")
 
+	# Wave-2 wiring: each new doctype MUST be declared in doctype_list_js. The generic loop below then proves
+	# the declared file EXTENDS native via fclists.extend_listview() and carries no bare reassignment.
+	for doctype in WAVE2_LIST_JS_DOCTYPES:
+		record(f"list_js:wave2_declared:{doctype}", doctype in list_js_map,
+			list_js_map.get(doctype, "MISSING from doctype_list_js"))
+
 	for doctype, relpath in sorted(list_js_map.items()):
 		# hook paths are relative to the app module dir (e.g. "public/js/item_list.js").
 		fpath = os.path.join(app_path, relpath.replace("/", os.sep))
@@ -159,6 +206,39 @@ def run():
 				f"cols={bool(cols)} rows={len(data) if isinstance(data, list) else 'n/a'}")
 		except Exception as e:  # noqa: BLE001
 			record(f"report:executes:{rname}", False, f"{type(e).__name__}: {e}")
+
+	# ----------------------------------------------------------------------------------------------
+	# (3b) BI FIXTURES — each Dashboard / Dashboard Chart / Number Card fixture is present, parses as JSON,
+	# ships at least one FClist-prefixed row, and references NO Frappe Insights / foreign BI app (BI is built
+	# on NATIVE frappe core doctypes only — Insights may be LINKED at runtime but is NEVER required).
+	# ----------------------------------------------------------------------------------------------
+	fixtures_dir = os.path.join(app_path, "fixtures")
+	for label, fname in BI_FIXTURE_FILES.items():
+		fpath = os.path.join(fixtures_dir, fname)
+		raw = _read(fpath)
+		record(f"bi:fixture_present:{label}", raw is not None, f"fixtures/{fname}")
+		if raw is None:
+			continue
+
+		try:
+			rows = json.loads(raw)
+		except Exception as e:  # noqa: BLE001
+			record(f"bi:fixture_parses:{label}", False, f"{type(e).__name__}: {e}")
+			continue
+		record(f"bi:fixture_parses:{label}", isinstance(rows, list), f"{type(rows).__name__}")
+		if not isinstance(rows, list):
+			continue
+
+		# At least one row, all FClist/FCLists-prefixed (scoped to OUR fixtures — never a foreign app's rows).
+		names = [str(r.get("name", "")) for r in rows if isinstance(r, dict)]
+		prefixed = bool(names) and all(n.startswith("FClist") or n.startswith("FCLists") for n in names)
+		record(f"bi:fixture_scoped:{label}", prefixed,
+			f"{len(names)} row(s): {', '.join(names) if names else 'none'}")
+
+		# No Frappe Insights / foreign-BI app referenced anywhere in the fixture JSON text.
+		hit = next((tok for tok in FORBIDDEN_BI_TOKENS if tok in raw), None)
+		record(f"bi:fixture_native_only:{label}", hit is None,
+			"native frappe BI only" if hit is None else f"foreign BI token: {hit}")
 
 	# ----------------------------------------------------------------------------------------------
 	# (4) DEPENDENCY HYGIENE — required_apps == ["erpnext"] and no forbidden imports/literals in tree.

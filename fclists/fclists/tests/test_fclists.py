@@ -2,7 +2,11 @@
 # See license.txt
 """Hermetic unit tests for FCLists — pure logic only, NO live ledger required.
 
-These tests cover the three ledger-free surfaces of the app:
+Covers BOTH Wave 1 (inventory + sales/transaction-history families) and Wave 2 (accounts / AR-AP density +
+BI-style rollups: Account, GL, Customer/Supplier Balance, Open Invoices aging, Purchase Invoice, Bank
+Reconciliation Queue, Best Sellers, Sales by Cashier/Department, Sales YoY).
+
+These tests cover the ledger-free surfaces of the app:
 
   1. The Script-Report COLUMN BUILDERS (`_columns()` in every report module). These are pure functions
      returning a static column schema — no DB reads — so we can assert their shape, fieldnames, and that
@@ -15,6 +19,10 @@ These tests cover the three ledger-free surfaces of the app:
           (due_date<today AND outstanding>0 ⇒ overdue; days<0 ⇒ Expired; days<=warn ⇒ Expiring; else OK),
           which is the ledger-independent core; the `_data()` assembly that needs Bin/SLE rows is out of
           scope for a hermetic test.
+        - The Wave-2 predicates: the AR aging-bucket classifier (Open Invoices), the available-credit floor
+          (Customer Balance), and the YoY period math (Sales YoY: whole-year Feb-29-safe shift, like-for-like
+          windows, guarded %-change). Each is mirrored as a pure function and checked against its report at
+          the boundaries; `_periods()`/`_bucket()` are also called on the real module (they need no ledger).
 
   3. The `fclists.extend_listview` SAVE-AND-CHAIN contract enforced at the source level: a JS-logic unit is
      impractical in Python, so instead we STATICALLY assert every `public/js/*_list.js` file goes through
@@ -41,6 +49,7 @@ from frappe.utils import getdate
 # Every Script Report, keyed by its DISPLAY name, mapped to the scrubbed module folder (Hard Rule 6:
 # reports live at fclists/fclists/report/<scrubbed>/<scrubbed>.py). Reference by display name.
 REPORT_MODULES = {
+	# --- Wave 1 -----------------------------------------------------------------------------------
 	"FClist Item Stock": "fclist_item_stock",
 	"FClist Batch Expiry": "fclist_batch_expiry",
 	"FClist Reorder": "fclist_reorder",
@@ -50,6 +59,33 @@ REPORT_MODULES = {
 	"FClist Payments": "fclist_payments",
 	"FClist POS Invoice": "fclist_pos_invoice",
 	"FClist Stock Movement": "fclist_stock_movement",
+	# --- Wave 2 (accounts / AR-AP density + BI-style rollups) --------------------------------------
+	"FClist Account": "fclist_account",
+	"FClist GL": "fclist_gl",
+	"FClist Customer Balance": "fclist_customer_balance",
+	"FClist Supplier Balance": "fclist_supplier_balance",
+	"FClist Open Invoices": "fclist_open_invoices",
+	"FClist Purchase Invoice": "fclist_purchase_invoice",
+	"FClist Bank Reconciliation Queue": "fclist_bank_reconciliation_queue",
+	"FClist Best Sellers": "fclist_best_sellers",
+	"FClist Sales by Cashier": "fclist_sales_by_cashier",
+	"FClist Sales by Department": "fclist_sales_by_department",
+	"FClist Sales YoY": "fclist_sales_yoy",
+}
+
+# The Wave-2 report display names — used to scope Wave-2-only assertions without re-listing Wave 1.
+WAVE2_REPORTS = {
+	"FClist Account",
+	"FClist GL",
+	"FClist Customer Balance",
+	"FClist Supplier Balance",
+	"FClist Open Invoices",
+	"FClist Purchase Invoice",
+	"FClist Bank Reconciliation Queue",
+	"FClist Best Sellers",
+	"FClist Sales by Cashier",
+	"FClist Sales by Department",
+	"FClist Sales YoY",
 }
 
 # Reports that carry the site_config `_enabled()` capability gate (the stock/inventory ones).
@@ -64,8 +100,8 @@ REPORTS_WITH_ENABLE_GATE = {
 # ALL native to Frappe/ERPNext — never a flowcore/fcduka/settle/etc. doctype (Hard Rule 1).
 ALLOWED_NATIVE_OPTION_DOCTYPES = {
 	"Item", "Item Group", "UOM", "Batch", "Warehouse", "Customer", "Supplier",
-	"Sales Invoice", "POS Invoice", "Payment Entry", "Mode of Payment", "POS Profile",
-	"Currency", "User", "Account", "Stock Ledger Entry", "GL Entry", "Bin",
+	"Sales Invoice", "POS Invoice", "Purchase Invoice", "Payment Entry", "Mode of Payment",
+	"POS Profile", "Currency", "User", "Account", "Stock Ledger Entry", "GL Entry", "Bin",
 }
 
 # Doctypes that must NEVER appear (single-owner / required_apps law — Hard Rule 1).
@@ -131,6 +167,47 @@ def _expiry_status(days_to_expiry, warn_days):
 	if days_to_expiry <= warn_days:
 		return "Expiring"
 	return "OK"
+
+
+def _aging_bucket(days_past_due):
+	"""AR aging-bucket classifier. Mirrors fclist_open_invoices._bucket EXACTLY:
+	   <=0 ⇒ Current · <=30 ⇒ 1-30 · <=60 ⇒ 31-60 · <=90 ⇒ 61-90 · else 90+.
+	Labels here are the raw (untranslated) strings the report's `_()` wraps — in a test context with no
+	translation loaded, `_(x)` is identity, so the report and this mirror return equal strings."""
+	if days_past_due <= 0:
+		return "Current"
+	if days_past_due <= 30:
+		return "1-30"
+	if days_past_due <= 60:
+		return "31-60"
+	if days_past_due <= 90:
+		return "61-90"
+	return "90+"
+
+
+def _available_credit(credit_limit, outstanding):
+	"""Available-credit predicate. Mirrors fclist_customer_balance._data:
+	   only meaningful when a limit is set; headroom = limit − outstanding, FLOORED at 0 (never negative).
+	   No limit set (falsy / 0) ⇒ 0.0 (we do not invent headroom)."""
+	limit = float(credit_limit or 0)
+	out = float(outstanding or 0)
+	return max(limit - out, 0.0) if limit else 0.0
+
+
+def _shift_year(d, years):
+	"""Mirror of fclist_sales_yoy._shift_year: shift whole years, guarding Feb-29 → Feb-28."""
+	try:
+		return d.replace(year=d.year + years)
+	except ValueError:
+		return d.replace(month=2, day=28, year=d.year + years)
+
+
+def _change_pct(this_year, last_year):
+	"""YoY %-change predicate. Mirrors fclist_sales_yoy._data: change/last*100 (2dp), 0 when last==0
+	(no divide-by-zero, no infinite growth)."""
+	ty = float(this_year or 0)
+	ly = float(last_year or 0)
+	return round((ty - ly) / ly * 100.0, 2) if ly else 0.0
 
 
 # ====================================================================================================
@@ -214,6 +291,73 @@ class TestReportColumns(FrappeTestCase):
 		reorder = {c["fieldname"] for c in _report_module("FClist Reorder")._columns()}
 		for fn in ("reorder_level", "on_hand", "shortfall"):
 			self.assertIn(fn, reorder, f"FClist Reorder missing column {fn}")
+
+	def test_wave2_reports_expose_expected_fieldnames(self):
+		"""Spot-check the load-bearing columns of each Wave-2 report (the ones a critic would name)."""
+		cust = {c["fieldname"] for c in _report_module("FClist Customer Balance")._columns()}
+		for fn in ("customer", "outstanding", "credit_limit", "available_credit", "past_due"):
+			self.assertIn(fn, cust, f"FClist Customer Balance missing column {fn}")
+
+		sup = {c["fieldname"] for c in _report_module("FClist Supplier Balance")._columns()}
+		for fn in ("supplier", "outstanding", "past_due"):
+			self.assertIn(fn, sup, f"FClist Supplier Balance missing column {fn}")
+
+		openi = {c["fieldname"] for c in _report_module("FClist Open Invoices")._columns()}
+		for fn in ("invoice", "customer", "due_date", "outstanding", "days_past_due", "bucket"):
+			self.assertIn(fn, openi, f"FClist Open Invoices missing column {fn}")
+
+		pinv = {c["fieldname"] for c in _report_module("FClist Purchase Invoice")._columns()}
+		for fn in ("supplier", "outstanding_amount", "due_date", "overdue"):
+			self.assertIn(fn, pinv, f"FClist Purchase Invoice missing column {fn}")
+
+		acc = {c["fieldname"] for c in _report_module("FClist Account")._columns()}
+		for fn in ("name", "account_type", "root_type", "balance"):
+			self.assertIn(fn, acc, f"FClist Account missing column {fn}")
+
+		gl = {c["fieldname"] for c in _report_module("FClist GL")._columns()}
+		for fn in ("posting_date", "account", "debit", "credit", "voucher_no", "party"):
+			self.assertIn(fn, gl, f"FClist GL missing column {fn}")
+
+		bank = {c["fieldname"] for c in _report_module("FClist Bank Reconciliation Queue")._columns()}
+		for fn in ("name", "payment_type", "paid_amount", "mode_of_payment", "account"):
+			self.assertIn(fn, bank, f"FClist Bank Reconciliation Queue missing column {fn}")
+
+		best = {c["fieldname"] for c in _report_module("FClist Best Sellers")._columns()}
+		for fn in ("rank", "item_code", "qty_sold", "revenue", "margin"):
+			self.assertIn(fn, best, f"FClist Best Sellers missing column {fn}")
+
+		cashier = {c["fieldname"] for c in _report_module("FClist Sales by Cashier")._columns()}
+		for fn in ("cashier", "invoice_count", "total_sales", "avg_sale"):
+			self.assertIn(fn, cashier, f"FClist Sales by Cashier missing column {fn}")
+
+		dept = {c["fieldname"] for c in _report_module("FClist Sales by Department")._columns()}
+		for fn in ("item_group", "qty", "revenue", "share_pct"):
+			self.assertIn(fn, dept, f"FClist Sales by Department missing column {fn}")
+
+		yoy = {c["fieldname"] for c in _report_module("FClist Sales YoY")._columns()}
+		for fn in ("period", "this_year", "last_year", "change", "change_pct"):
+			self.assertIn(fn, yoy, f"FClist Sales YoY missing column {fn}")
+
+	def test_wave2_reports_have_no_enable_gate(self):
+		"""Wave-2 (accounts/AR-AP) reports are NOT behind the stock `_enabled()` site-config gate — they are
+		accounts surfaces, always available. Guard against a copy-paste that would wrongly gate them off."""
+		for name in WAVE2_REPORTS:
+			self.assertNotIn(name, REPORTS_WITH_ENABLE_GATE, f"{name}: Wave-2 report must not be enable-gated")
+
+	def test_dynamic_link_options_name_a_sibling_fieldname(self):
+		"""Wave-2 GL / Bank-Rec reports use Dynamic Link columns (voucher_no→voucher_type, party→party_type).
+		Every Dynamic Link `options` must name a real sibling column fieldname (so it resolves at runtime),
+		never a hard doctype literal."""
+		for name in ("FClist GL", "FClist Bank Reconciliation Queue"):
+			cols = _report_module(name)._columns()
+			fieldnames = {c["fieldname"] for c in cols}
+			dyn = [c for c in cols if c["fieldtype"] == "Dynamic Link"]
+			self.assertGreater(len(dyn), 0, f"{name}: expected at least one Dynamic Link column")
+			for c in dyn:
+				self.assertIn(
+					c["options"], fieldnames,
+					f"{name}: Dynamic Link {c['fieldname']} options={c['options']!r} must name a sibling column",
+				)
 
 
 # ====================================================================================================
@@ -313,17 +457,168 @@ class TestFlagPredicates(FrappeTestCase):
 
 
 # ====================================================================================================
+# 2c. Wave-2 predicates — AR aging buckets, available-credit floor, and YoY period math.
+#     Pure threshold/date contracts (ledger-independent); each mirrors its report EXACTLY.
+# ====================================================================================================
+
+class TestAgingBucketPredicate(FrappeTestCase):
+	"""fclist_open_invoices._bucket: Current / 1-30 / 31-60 / 61-90 / 90+."""
+
+	def test_current_when_not_yet_due(self):
+		# not yet due (negative days-past-due) and exactly on the due date are BOTH "Current" (<= 0).
+		self.assertEqual(_aging_bucket(-5), "Current")
+		self.assertEqual(_aging_bucket(0), "Current")
+
+	def test_bucket_1_30(self):
+		self.assertEqual(_aging_bucket(1), "1-30")
+		self.assertEqual(_aging_bucket(30), "1-30")
+
+	def test_bucket_31_60(self):
+		self.assertEqual(_aging_bucket(31), "31-60")
+		self.assertEqual(_aging_bucket(60), "31-60")
+
+	def test_bucket_61_90(self):
+		self.assertEqual(_aging_bucket(61), "61-90")
+		self.assertEqual(_aging_bucket(90), "61-90")
+
+	def test_bucket_90_plus(self):
+		self.assertEqual(_aging_bucket(91), "90+")
+		self.assertEqual(_aging_bucket(3650), "90+")
+
+	def test_mirror_matches_report_source(self):
+		"""The report's own _bucket must return the same label as our pure mirror at every boundary
+		(in a test context `_()` is identity, so labels compare equal)."""
+		bucket = _report_module("FClist Open Invoices")._bucket
+		for dpd in (-10, -1, 0, 1, 15, 30, 31, 45, 60, 61, 75, 90, 91, 200):
+			self.assertEqual(
+				str(bucket(dpd)), _aging_bucket(dpd),
+				f"open_invoices._bucket({dpd}) disagrees with mirror",
+			)
+
+
+class TestAvailableCreditPredicate(FrappeTestCase):
+	"""fclist_customer_balance available-credit: max(limit − outstanding, 0) when a limit is set, else 0."""
+
+	def test_headroom_when_under_limit(self):
+		self.assertEqual(_available_credit(1000.0, 400.0), 600.0)
+
+	def test_zero_when_exactly_at_limit(self):
+		self.assertEqual(_available_credit(1000.0, 1000.0), 0.0)
+
+	def test_floored_at_zero_when_over_limit(self):
+		"""Over the limit ⇒ 0, NEVER a negative headroom."""
+		self.assertEqual(_available_credit(1000.0, 1500.0), 0.0)
+
+	def test_zero_when_no_limit_set(self):
+		"""No credit limit (0/None) ⇒ available credit is 0 — we do not invent unlimited headroom."""
+		self.assertEqual(_available_credit(0, 500.0), 0.0)
+		self.assertEqual(_available_credit(None, 500.0), 0.0)
+
+	def test_full_headroom_when_nothing_outstanding(self):
+		self.assertEqual(_available_credit(1000.0, 0.0), 1000.0)
+
+
+class TestYoYPeriodMath(FrappeTestCase):
+	"""fclist_sales_yoy: whole-year shift (Feb-29 guard), like-for-like windows, and %-change contract."""
+
+	def test_shift_year_back_one(self):
+		self.assertEqual(_shift_year(getdate("2026-07-02"), -1), getdate("2025-07-02"))
+
+	def test_shift_year_forward_one(self):
+		self.assertEqual(_shift_year(getdate("2026-07-02"), 1), getdate("2027-07-02"))
+
+	def test_shift_year_leap_day_guarded(self):
+		"""Feb-29 has no counterpart in a non-leap year ⇒ clamp to Feb-28 (no ValueError)."""
+		self.assertEqual(_shift_year(getdate("2024-02-29"), -1), getdate("2023-02-28"))
+		self.assertEqual(_shift_year(getdate("2024-02-29"), 1), getdate("2025-02-28"))
+
+	def test_shift_year_leap_to_leap_preserved(self):
+		"""Leap-day → another leap year keeps Feb-29 (2024 → 2028)."""
+		self.assertEqual(_shift_year(getdate("2024-02-29"), 4), getdate("2028-02-29"))
+
+	def test_change_pct_growth(self):
+		self.assertEqual(_change_pct(150.0, 100.0), 50.0)
+
+	def test_change_pct_decline(self):
+		self.assertEqual(_change_pct(80.0, 100.0), -20.0)
+
+	def test_change_pct_zero_last_year_is_zero_not_infinite(self):
+		"""No prior-year sales ⇒ 0% (guarded divide), never a divide-by-zero or infinite growth."""
+		self.assertEqual(_change_pct(500.0, 0.0), 0.0)
+		self.assertEqual(_change_pct(0.0, 0.0), 0.0)
+
+	def test_change_pct_rounded_two_dp(self):
+		self.assertEqual(_change_pct(1000.0, 3.0), round((1000.0 - 3.0) / 3.0 * 100.0, 2))
+
+	def test_periods_windows_are_like_for_like(self):
+		"""The report's _periods() must return 4 windows (Today, WTD, MTD, YTD); each last-year window is
+		the same span shifted back exactly one year (same start offset, same end offset)."""
+		mod = _report_module("FClist Sales YoY")
+		today = getdate("2026-07-02")  # a Thursday
+		periods = mod._periods(today)
+		self.assertEqual(len(periods), 4, "expected exactly Today / WTD / MTD / YTD")
+		for label, ty_start, ty_end, ly_start, ly_end in periods:
+			# this-year window ends today; last-year window ends one year before today.
+			self.assertEqual(ty_end, today, f"{label}: this-year window must end today")
+			self.assertEqual(ly_end, _shift_year(ty_end, -1), f"{label}: last-year end must be TY end −1yr")
+			self.assertEqual(ly_start, _shift_year(ty_start, -1), f"{label}: last-year start must be TY start −1yr")
+			self.assertLessEqual(ty_start, ty_end, f"{label}: start must not follow end")
+
+	def test_periods_boundaries(self):
+		"""MTD starts on the 1st, YTD on Jan-1, WTD on Monday of the current ISO week, Today is a point."""
+		mod = _report_module("FClist Sales YoY")
+		today = getdate("2026-07-02")  # Thursday, ISO weekday 3 (Mon=0)
+		by_label = {p[0]: p for p in mod._periods(today)}
+		# labels are `_()`-wrapped; in test context identity, so keys are the plain strings.
+		self.assertEqual(str(by_label["Today"][1]), str(today))
+		self.assertEqual(str(by_label["Month to Date"][1]), "2026-07-01")
+		self.assertEqual(str(by_label["Year to Date"][1]), "2026-01-01")
+		self.assertEqual(str(by_label["Week to Date"][1]), "2026-06-29")  # Monday of that week
+
+
+# ====================================================================================================
 # 3. fclists.extend_listview save-and-chain contract — enforced STATICALLY on the *_list.js source.
 # ====================================================================================================
 
 class TestListJsExtendContract(FrappeTestCase):
+	# The four NEW list-js surfaces Wave 2 adds (AR/AP + Chart-of-Accounts lanes). Each must extend
+	# native via fclists.extend_listview() with no bare reassignment (Finding A) — asserted explicitly
+	# below in addition to the all-files sweep.
+	WAVE2_LIST_JS = ("account_list.js", "customer_list.js", "purchase_invoice_list.js", "supplier_list.js")
+
 	def test_list_js_files_exist(self):
 		files = _list_js_files()
 		self.assertGreater(len(files), 0, "no *_list.js files found under public/js")
-		# the four listview surfaces we ship (Hard Rule 2 applies to each)
+		# the four Wave-1 listview surfaces we ship (Hard Rule 2 applies to each)
 		basenames = {os.path.basename(f) for f in files}
 		for expected in ("item_list.js", "batch_list.js", "sales_invoice_list.js", "pos_invoice_list.js"):
 			self.assertIn(expected, basenames, f"missing expected list-js: {expected}")
+
+	def test_wave2_list_js_files_exist(self):
+		"""The four NEW Wave-2 list-js surfaces must be present."""
+		basenames = {os.path.basename(f) for f in _list_js_files()}
+		for expected in self.WAVE2_LIST_JS:
+			self.assertIn(expected, basenames, f"missing expected Wave-2 list-js: {expected}")
+
+	def test_wave2_list_js_extend_native_with_no_bare_reassignment(self):
+		"""Finding A, scoped to the four NEW *_list.js: each MUST register via fclists.extend_listview(...)
+		(merge + save-and-chain) and contain NO bare `frappe.listview_settings["X"] = {...}` in real code
+		(comments are stripped first, so the cautionary comment quoting the anti-pattern is not a match)."""
+		bare = re.compile(r"frappe\s*\.\s*listview_settings\s*\[[^\]]+\]\s*=")
+		js_dir = _list_js_dir()
+		for base in self.WAVE2_LIST_JS:
+			path = os.path.join(js_dir, base)
+			with open(path, encoding="utf-8") as fh:
+				code = _strip_js_line_comments(fh.read())
+			self.assertIn(
+				"fclists.extend_listview(", code,
+				f"{base} must extend via fclists.extend_listview()",
+			)
+			self.assertIsNone(
+				bare.search(code),
+				f"{base} contains a BARE listview_settings reassignment (Finding A) — "
+				f"use fclists.extend_listview() instead",
+			)
 
 	def test_every_list_js_uses_extend_listview(self):
 		"""Finding A: each *_list.js MUST register via fclists.extend_listview(...) — never a hand-rolled

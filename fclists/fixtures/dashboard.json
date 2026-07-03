@@ -1,0 +1,32 @@
+[
+ {
+  "doctype": "Dashboard",
+  "name": "FCLists BI",
+  "dashboard_name": "FCLists BI",
+  "is_default": 0,
+  "is_standard": 1,
+  "module": "FCLists",
+  "charts": [
+   {
+    "doctype": "Dashboard Chart Link",
+    "chart": "FClist Sales Trend",
+    "width": "Full"
+   },
+   {
+    "doctype": "Dashboard Chart Link",
+    "chart": "FClist Top Customers",
+    "width": "Half"
+   }
+  ],
+  "cards": [
+   {
+    "doctype": "Number Card Link",
+    "card": "FClist Total Sales MTD"
+   },
+   {
+    "doctype": "Number Card Link",
+    "card": "FClist Overdue AR"
+   }
+  ]
+ }
+]
