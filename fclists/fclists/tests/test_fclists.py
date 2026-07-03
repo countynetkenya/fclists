@@ -71,6 +71,9 @@ REPORT_MODULES = {
 	"FClist Sales by Cashier": "fclist_sales_by_cashier",
 	"FClist Sales by Department": "fclist_sales_by_department",
 	"FClist Sales YoY": "fclist_sales_yoy",
+	# --- Wave 3 (QB-POS parity borrows — S035, live-gemba screens from the agrovet) -----------------
+	"FClist Payment Summary": "fclist_payment_summary",
+	"FClist Receipt Detail": "fclist_receipt_detail",
 }
 
 # The Wave-2 report display names — used to scope Wave-2-only assertions without re-listing Wave 1.
@@ -653,3 +656,121 @@ class TestListJsExtendContract(FrappeTestCase):
 			src = fh.read()
 		self.assertIn("frappe.provide(\"fclists\")", src)
 		self.assertRegex(src, r"fclists\.extend_listview\s*=\s*function")
+
+
+# ====================================================================================================
+# Wave 3 — QB-POS parity borrows (S035): pure helpers tested on the REAL modules (they need no ledger).
+# ====================================================================================================
+
+class TestPaymentSummaryHelpers(FrappeTestCase):
+	"""fclist_payment_summary: the day x tender matrix's pure helpers — the column-key scrubber and the
+	change-netting rule (QB-POS shows what STAYED in the drawer, not what was handed over)."""
+
+	@property
+	def mod(self):
+		return _report_module("FClist Payment Summary")
+
+	def test_mode_fieldname_scrubs_to_safe_keys(self):
+		self.assertEqual(self.mod._mode_fieldname("Cash"), "m_cash")
+		self.assertEqual(self.mod._mode_fieldname("M-Pesa (Till)"), "m_m_pesa_till")
+
+	def test_mode_fieldname_distinct_for_distinct_modes(self):
+		self.assertNotEqual(self.mod._mode_fieldname("Visa"), self.mod._mode_fieldname("M-Pesa"))
+
+	def test_net_tenders_deducts_change_from_cash(self):
+		"""1000 sale, 1100 cash given, 100 change back -> the drawer kept 1000 cash."""
+		rows = self.mod._net_tenders(
+			[{"mode_of_payment": "Cash", "amount": 1100.0}], 100.0, {"Cash": "Cash"}
+		)
+		self.assertEqual(rows, [("Cash", 1000.0)])
+
+	def test_net_tenders_prefers_cash_type_row_for_change(self):
+		"""Split tender: change comes out of the Cash-type mode, never the bank mode."""
+		rows = self.mod._net_tenders(
+			[
+				{"mode_of_payment": "M-Pesa", "amount": 500.0},
+				{"mode_of_payment": "Cash", "amount": 700.0},
+			],
+			200.0,
+			{"Cash": "Cash", "M-Pesa": "Bank"},
+		)
+		self.assertEqual(dict(rows), {"M-Pesa": 500.0, "Cash": 500.0})
+
+	def test_net_tenders_falls_back_to_largest_row(self):
+		"""No Cash-type mode configured: deduct from the largest tender so the day still ties."""
+		rows = self.mod._net_tenders(
+			[
+				{"mode_of_payment": "M-Pesa", "amount": 900.0},
+				{"mode_of_payment": "Voucher", "amount": 100.0},
+			],
+			50.0,
+			{"M-Pesa": "Bank", "Voucher": "General"},
+		)
+		self.assertEqual(dict(rows), {"M-Pesa": 850.0, "Voucher": 100.0})
+
+	def test_net_tenders_drops_zeroed_rows(self):
+		rows = self.mod._net_tenders(
+			[{"mode_of_payment": "Cash", "amount": 100.0}], 100.0, {"Cash": "Cash"}
+		)
+		self.assertEqual(rows, [])
+
+	def test_net_tenders_no_change_passthrough(self):
+		rows = self.mod._net_tenders(
+			[{"mode_of_payment": "Cash", "amount": 250.0}], 0, {"Cash": "Cash"}
+		)
+		self.assertEqual(rows, [("Cash", 250.0)])
+
+	def test_columns_default_shape_without_modes(self):
+		"""_columns() with no modes (the hermetic/no-data case) = Date + On Account + Daily Total."""
+		names = [c["fieldname"] for c in self.mod._columns()]
+		self.assertEqual(names, ["posting_date", "on_account", "daily_total"])
+
+	def test_columns_insert_mode_columns_between_date_and_on_account(self):
+		names = [c["fieldname"] for c in self.mod._columns(["Cash", "M-Pesa"])]
+		self.assertEqual(names, ["posting_date", "m_cash", "m_m_pesa", "on_account", "daily_total"])
+
+
+class TestReceiptDetailHelpers(FrappeTestCase):
+	"""fclist_receipt_detail: the tender-label rule (QB-POS 'Payment' column semantics)."""
+
+	@property
+	def mod(self):
+		return _report_module("FClist Receipt Detail")
+
+	def test_credit_sale_is_on_account(self):
+		self.assertEqual(self.mod._tender_label([], is_pos=0, fully_paid=False), "On Account")
+
+	def test_pos_single_mode(self):
+		rows = [{"mode_of_payment": "Cash", "amount": 500.0}]
+		self.assertEqual(self.mod._tender_label(rows, is_pos=1, fully_paid=True), "Cash")
+
+	def test_pos_split_tender_joined(self):
+		rows = [
+			{"mode_of_payment": "Cash", "amount": 200.0},
+			{"mode_of_payment": "M-Pesa", "amount": 300.0},
+		]
+		self.assertEqual(self.mod._tender_label(rows, is_pos=1, fully_paid=True), "Cash + M-Pesa")
+
+	def test_pos_partial_tender_appends_on_account(self):
+		rows = [{"mode_of_payment": "Cash", "amount": 200.0}]
+		self.assertEqual(
+			self.mod._tender_label(rows, is_pos=1, fully_paid=False), "Cash + On Account"
+		)
+
+	def test_zero_amount_modes_ignored(self):
+		rows = [
+			{"mode_of_payment": "Cash", "amount": 0.0},
+			{"mode_of_payment": "M-Pesa", "amount": 450.0},
+		]
+		self.assertEqual(self.mod._tender_label(rows, is_pos=1, fully_paid=True), "M-Pesa")
+
+	def test_pos_with_no_tender_rows_is_on_account(self):
+		self.assertEqual(self.mod._tender_label([], is_pos=1, fully_paid=False), "On Account")
+
+	def test_tree_contract_fields_present_in_columns(self):
+		"""The tree register's name_field ('label') must exist as the first column (the JS tree config
+		points at it); qty/rate/total shared by receipt and item rows must be present."""
+		names = [c["fieldname"] for c in self.mod._columns()]
+		self.assertEqual(names[0], "label")
+		for required in ("qty", "rate", "total", "tender", "line_count", "open_link"):
+			self.assertIn(required, names)

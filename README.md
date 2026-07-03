@@ -100,6 +100,13 @@ filtered by your own permissions.
 | **FClist Sales by Department** | Sales Invoice Item | Accounts User, Accounts Manager, System Manager | Sales grouped by item group ("department"): qty, revenue and share-% of total revenue. |
 | **FClist Sales YoY** | Sales Invoice | Accounts User, Accounts Manager, System Manager | The QuickBooks dashboard glance: Today / WTD / MTD / YTD this year vs the same period last year, with the % change. |
 
+#### Wave-3 — QB-POS parity borrows (the reconciliation matrix & the receipt drill-down)
+
+| Report (open by this name) | Over | Roles that can read it | What it gives you |
+|---|---|---|---|
+| **FClist Payment Summary** | Sales Invoice | Accounts User, Accounts Manager, System Manager | The QuickBooks-POS day × tender reconciliation matrix: one row per day, one Currency column per mode of payment actually used (net of change given), an *On Account* column for credit sales, and a daily total. |
+| **FClist Receipt Detail** | Sales Invoice | Accounts User, Accounts Manager, System Manager | The QuickBooks-POS expandable receipt register: per receipt — date, time, Sales/Return, customer, qty, total, tender, cashier, line count — expanding (tree) to its item lines with qty, rate and amount. |
+
 A **login-gated user guide** ships with the app at `/fclists-guide` (gated to those same Stock and
 Accounts roles) — a task-shaped walkthrough for end users.
 

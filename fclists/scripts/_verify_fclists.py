@@ -60,8 +60,16 @@ WAVE2_REPORTS = [
 	"FClist Bank Reconciliation Queue",
 ]
 
-# All reports the verifier gates (Wave-1 + Wave-2). Existence / role-gating / execution apply to every one.
-REPORTS = WAVE1_REPORTS + WAVE2_REPORTS
+# Wave-3 reports (QB-POS parity borrows, S035 — the agrovet's live Payment Summary + Sales Receipt Detail
+# screens). Same contract: role-gated Script Reports over NATIVE erpnext doctypes, executed via the runner.
+WAVE3_REPORTS = [
+	"FClist Payment Summary",
+	"FClist Receipt Detail",
+]
+
+# All reports the verifier gates (Wave-1 + Wave-2 + Wave-3). Existence / role-gating / execution apply to
+# every one.
+REPORTS = WAVE1_REPORTS + WAVE2_REPORTS + WAVE3_REPORTS
 
 # Wave-2 list-JS doctypes that MUST be declared in fclists.hooks.doctype_list_js (each resolves to a
 # *_list.js that EXTENDS native via fclists.extend_listview() — proven by the generic wiring loop below).

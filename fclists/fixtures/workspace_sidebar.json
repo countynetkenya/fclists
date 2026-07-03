@@ -16,6 +16,8 @@
    {"label": "FClist Sales History", "type": "Link", "link_type": "Report", "link_to": "FClist Sales History"},
    {"label": "FClist Returns", "type": "Link", "link_type": "Report", "link_to": "FClist Returns"},
    {"label": "FClist Payments", "type": "Link", "link_type": "Report", "link_to": "FClist Payments"},
+   {"label": "FClist Payment Summary", "type": "Link", "link_type": "Report", "link_to": "FClist Payment Summary"},
+   {"label": "FClist Receipt Detail", "type": "Link", "link_type": "Report", "link_to": "FClist Receipt Detail"},
    {"label": "FClist Customer Balance", "type": "Link", "link_type": "Report", "link_to": "FClist Customer Balance"},
    {"label": "FClist Open Invoices", "type": "Link", "link_type": "Report", "link_to": "FClist Open Invoices"},
    {"label": "FClist Supplier Balance", "type": "Link", "link_type": "Report", "link_to": "FClist Supplier Balance"},
