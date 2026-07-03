@@ -1,0 +1,32 @@
+[
+ {
+  "doctype": "Workspace Sidebar",
+  "name": "FCLists",
+  "title": "FCLists",
+  "header_icon": "list-alt",
+  "module": "FCLists",
+  "items": [
+   {"label": "Home", "type": "Link", "link_type": "Workspace", "link_to": "FCLists"},
+   {"label": "FClist Item Stock", "type": "Link", "link_type": "Report", "link_to": "FClist Item Stock"},
+   {"label": "FClist Reorder", "type": "Link", "link_type": "Report", "link_to": "FClist Reorder"},
+   {"label": "FClist Batch Expiry", "type": "Link", "link_type": "Report", "link_to": "FClist Batch Expiry"},
+   {"label": "FClist Stock Movement", "type": "Link", "link_type": "Report", "link_to": "FClist Stock Movement"},
+   {"label": "FClist Sales Invoice", "type": "Link", "link_type": "Report", "link_to": "FClist Sales Invoice"},
+   {"label": "FClist POS Invoice", "type": "Link", "link_type": "Report", "link_to": "FClist POS Invoice"},
+   {"label": "FClist Sales History", "type": "Link", "link_type": "Report", "link_to": "FClist Sales History"},
+   {"label": "FClist Returns", "type": "Link", "link_type": "Report", "link_to": "FClist Returns"},
+   {"label": "FClist Payments", "type": "Link", "link_type": "Report", "link_to": "FClist Payments"},
+   {"label": "FClist Customer Balance", "type": "Link", "link_type": "Report", "link_to": "FClist Customer Balance"},
+   {"label": "FClist Open Invoices", "type": "Link", "link_type": "Report", "link_to": "FClist Open Invoices"},
+   {"label": "FClist Supplier Balance", "type": "Link", "link_type": "Report", "link_to": "FClist Supplier Balance"},
+   {"label": "FClist Purchase Invoice", "type": "Link", "link_type": "Report", "link_to": "FClist Purchase Invoice"},
+   {"label": "FClist Account", "type": "Link", "link_type": "Report", "link_to": "FClist Account"},
+   {"label": "FClist GL", "type": "Link", "link_type": "Report", "link_to": "FClist GL"},
+   {"label": "FClist Bank Reconciliation Queue", "type": "Link", "link_type": "Report", "link_to": "FClist Bank Reconciliation Queue"},
+   {"label": "FClist Best Sellers", "type": "Link", "link_type": "Report", "link_to": "FClist Best Sellers"},
+   {"label": "FClist Sales by Cashier", "type": "Link", "link_type": "Report", "link_to": "FClist Sales by Cashier"},
+   {"label": "FClist Sales by Department", "type": "Link", "link_type": "Report", "link_to": "FClist Sales by Department"},
+   {"label": "FClist Sales YoY", "type": "Link", "link_type": "Report", "link_to": "FClist Sales YoY"}
+  ]
+ }
+]

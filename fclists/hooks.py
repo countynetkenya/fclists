@@ -82,4 +82,8 @@ fixtures = [
 	{"dt": "Number Card", "filters": [["name", "like", "FClist %"]]},
 	{"dt": "Dashboard Chart", "filters": [["name", "like", "FClist %"]]},
 	{"dt": "Dashboard", "filters": [["name", "like", "FCLists%"]]},
+	# The desk left-nav (Flowcore UI Standard: nav via Workspace Sidebar). Without this fixture the
+	# desk auto-snapshots a sidebar from whatever the Workspace held on FIRST visit and never
+	# regenerates it — a Wave-1 visitor would keep a 9-report sidebar forever (S033 bug).
+	{"dt": "Workspace Sidebar", "filters": [["name", "=", "FCLists"]]},
 ]

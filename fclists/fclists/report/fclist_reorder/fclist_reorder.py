@@ -33,6 +33,10 @@ def _columns():
 		{"label": _("Reorder Level"), "fieldname": "reorder_level", "fieldtype": "Float", "width": 120},
 		{"label": _("Shortfall"), "fieldname": "shortfall", "fieldtype": "Float", "width": 100},
 		{"label": _("Default Supplier"), "fieldname": "default_supplier", "fieldtype": "Link", "options": "Supplier", "width": 180},
+		# constant 1 per row: Number Cards over Script Reports only support Sum/Average/Min/Max
+		# (frappe report_utils.get_result_of_fn has no Count), so the workspace card counts rows
+		# by summing this flag.
+		{"label": _("Below Reorder?"), "fieldname": "below_reorder", "fieldtype": "Int", "width": 90},
 	]
 
 
@@ -106,6 +110,7 @@ def _data(filters):
 				"reorder_level": lvl,
 				"shortfall": lvl - qty,
 				"default_supplier": it.default_supplier,
+				"below_reorder": 1,
 			})
 	# most-urgent first (largest shortfall), stable tie-break by item.
 	rows.sort(key=lambda r: (-r["shortfall"], r["item_code"]))
