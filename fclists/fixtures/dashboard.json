@@ -4,7 +4,7 @@
   "name": "FCLists BI",
   "dashboard_name": "FCLists BI",
   "is_default": 0,
-  "is_standard": 1,
+  "is_standard": 0,
   "module": "FCLists",
   "charts": [
    {
