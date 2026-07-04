@@ -7,8 +7,9 @@ reprint / lookup screen a till operator or manager reaches for at end of day.
 The "Print" column is a Link to the Sales Invoice; the desk's built-in "Print" action on the opened form does
 the actual receipt reprint — we do not rebuild printing (anti-reinvention).
 
-Security: ORM-only (frappe.get_all) → User Permissions enforced automatically (Finding B). No raw SQL, so no
-build_match_conditions needed. Role-gated on its Report doc (native Accounts roles + System Manager).
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager). The row
+query runs through frappe.get_list → read permission is checked and User Permissions scope the rows.
+No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
 """
 import frappe
@@ -53,7 +54,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		si_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=[

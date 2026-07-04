@@ -5,9 +5,10 @@ in PYTHON from due_date vs today: Current (not yet due), 1-30, 31-60, 61-90, 90+
 the classic A/R aging worklist a collections clerk works down; the native Sales Invoice list cannot
 derive the bucket (it depends on today's date against due_date).
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL,
-so no build_match_conditions needed. Role-gated on the Report doc (native Accounts roles + System
-Manager) — never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The row query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows (a user permitted to Company A never sees Company B's aging worklist).
+No raw SQL, so no build_match_conditions needed.
 
 v16-safe: explicit order_by; no grouped-sum field strings (buckets computed per row in Python).
 Sector-neutral; config-driven.
@@ -55,7 +56,8 @@ def _data(filters):
 	if filters.get("customer"):
 		si_filters["customer"] = filters.customer
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=["name", "customer", "posting_date", "due_date", "outstanding_amount", "currency"],

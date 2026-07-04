@@ -34,6 +34,7 @@ Runnable via:  bench --site <site> run-tests --app fclists --module \
                  fclists.fclists.tests.test_fclists
 """
 
+import json
 import os
 import re
 
@@ -774,3 +775,69 @@ class TestReceiptDetailHelpers(FrappeTestCase):
 		self.assertEqual(names[0], "label")
 		for required in ("qty", "rate", "total", "tender", "line_count", "open_link"):
 			self.assertIn(required, names)
+
+
+# ====================================================================================================
+# 4. The user-guide gate (www/fclists-guide.py) — the pure role-intersection predicate, hermetically,
+#    plus the on-disk consistency law: ALLOWED_ROLES == the union of every report JSON's roles table.
+# ====================================================================================================
+
+def _guide_module():
+	"""Import the www controller (hyphenated filename → importlib, not an import statement)."""
+	import importlib
+
+	return importlib.import_module("fclists.www.fclists-guide")
+
+
+class TestGuideGatePredicate(FrappeTestCase):
+	"""has_guide_access() is the guide's whole decision (get_context only adds the explicit Guest
+	short-circuit) — pure set logic, so it gets the fast hermetic layer (sw/testing.md §4)."""
+
+	def test_roleless_user_denied(self):
+		self.assertFalse(_guide_module().has_guide_access([]))
+
+	def test_none_roles_denied(self):
+		self.assertFalse(_guide_module().has_guide_access(None))
+
+	def test_guest_only_roles_denied(self):
+		"""'Guest' (and 'All') are NOT report-reading roles — a bare session never qualifies."""
+		self.assertFalse(_guide_module().has_guide_access(["Guest", "All"]))
+
+	def test_unrelated_roles_denied(self):
+		self.assertFalse(_guide_module().has_guide_access(["Employee", "Sales User", "Purchase User"]))
+
+	def test_each_allowed_role_admits_alone(self):
+		mod = _guide_module()
+		for role in ("System Manager", "Stock Manager", "Stock User", "Accounts Manager", "Accounts User"):
+			self.assertTrue(mod.has_guide_access([role]), f"{role} alone must admit")
+
+	def test_allowed_role_admits_amid_noise(self):
+		self.assertTrue(_guide_module().has_guide_access(["All", "Guest", "Employee", "Accounts User"]))
+
+	def test_allowed_roles_match_report_json_union(self):
+		"""The gate's ALLOWED_ROLES must equal the union of the roles tables across ALL report JSONs
+		on disk (the guide admits exactly the users who can open at least one report — no drift).
+		The report set is enumerated FROM DISK and asserted equal to REPORT_MODULES, so a report
+		folder added without updating REPORT_MODULES fails here instead of silently escaping the law."""
+		report_dir = os.path.join(frappe.get_app_path("fclists"), "fclists", "report")
+		on_disk = {
+			d for d in os.listdir(report_dir)
+			if d != "__pycache__" and os.path.isdir(os.path.join(report_dir, d))
+		}
+		self.assertEqual(
+			on_disk, set(REPORT_MODULES.values()),
+			"report folders on disk drifted from REPORT_MODULES — register the new report in "
+			"REPORT_MODULES (and the guide gate) or remove the stray folder",
+		)
+		union = set()
+		for scrubbed in REPORT_MODULES.values():
+			path = os.path.join(report_dir, scrubbed, f"{scrubbed}.json")
+			self.assertTrue(os.path.exists(path), f"missing report JSON: {path}")
+			with open(path, encoding="utf-8") as fh:
+				doc = json.load(fh)
+			union |= {row["role"] for row in doc.get("roles", [])}
+		self.assertEqual(
+			union, _guide_module().ALLOWED_ROLES,
+			"guide ALLOWED_ROLES drifted from the union of report-JSON roles — update the gate "
+			"(and this law) together with the report that introduced the new role",
+		)

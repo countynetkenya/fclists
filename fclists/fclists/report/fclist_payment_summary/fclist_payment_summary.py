@@ -15,8 +15,10 @@ Anti-reinvention: ERPNext's native "Sales Payment Summary" groups by invoice/mod
 QB-POS day x tender pivot with change-netting and an on-account column — this report is that thin delta,
 composed from native Sales Invoice / Sales Invoice Payment / Mode of Payment only.
 
-Security: ORM-only (frappe.get_all) → User Permissions enforced automatically (Finding B). No raw SQL, so
-no build_match_conditions needed. Role-gated on its Report doc (native Accounts roles + System Manager).
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager). The
+row-driving Sales Invoice query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows; the tender child rows are read only for those already-permitted invoices.
+No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
 """
 import re
@@ -83,7 +85,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		si_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the invoice rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=["name", "posting_date", "is_pos", "grand_total", "change_amount"],
@@ -93,6 +96,7 @@ def _data(filters):
 	pos_names = [si.name for si in invoices if si.is_pos]
 	payments_by_parent = {}
 	if pos_names:
+		# get_all here is safe: child rows scoped to parents from the permission-checked get_list above.
 		payment_rows = frappe.get_all(
 			"Sales Invoice Payment",
 			filters={"parenttype": "Sales Invoice", "parent": ["in", pos_names], "docstatus": 1},
@@ -103,6 +107,8 @@ def _data(filters):
 		for p in payment_rows:
 			payments_by_parent.setdefault(p.parent, []).append(p)
 
+	# Mode-of-Payment TYPE labels (Cash/Bank) for the change-netting rule — reference data used to
+	# classify tenders already read from permitted invoices, not row data, so get_all is fine here.
 	mode_types = {
 		m.name: m.type
 		for m in frappe.get_all("Mode of Payment", fields=["name", "type"], order_by="name asc")

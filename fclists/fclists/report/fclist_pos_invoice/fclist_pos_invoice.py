@@ -5,8 +5,10 @@ summary (e.g. "Cash: 500, M-Pesa: 1200"), and an is_return flag. The mode-of-pay
 child table `Sales Invoice Payment` (parent = POS Invoice), so a plain list view cannot show it — this
 Script Report is the native tool.
 
-Security: ORM-only (frappe.get_all) → User Permissions enforced automatically (Finding B). No raw SQL, so no
-build_match_conditions needed. Role-gated on its Report doc (native Accounts roles + System Manager).
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager). The
+row-driving POS Invoice query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows; tender child rows are read only for those already-permitted receipts.
+No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; per-invoice tender totals summed in PYTHON (frappe get_all rejects
 "sum(x) as y" field strings); read-only.
 """
@@ -47,7 +49,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		pos_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the receipt rows.
+	invoices = frappe.get_list(
 		"POS Invoice",
 		filters=pos_filters,
 		fields=[
@@ -62,6 +65,7 @@ def _data(filters):
 	names = [i.name for i in invoices]
 
 	# Tender lines for these receipts (child table Sales Invoice Payment). Sum per-parent in Python.
+	# get_all here is safe: child rows scoped to parents from the permission-checked get_list above.
 	payments = frappe.get_all(
 		"Sales Invoice Payment",
 		filters={"parenttype": "POS Invoice", "parent": ["in", names]},

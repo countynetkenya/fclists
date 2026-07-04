@@ -4,9 +4,10 @@ Per item_group over a date range: qty, revenue, share% of total revenue. item_gr
 Item's own group (the department the line belongs to). The native list has no "group by department with sum
 + share" view, so this Script Report is the native tool.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. Role-gated on the Report doc (native Accounts roles + System Manager) —
-never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The row-driving Sales Invoice query runs through frappe.get_list → read permission is
+checked and User Permissions scope the rows; line rows are read only for those already-permitted
+invoices. No raw SQL, so no build_match_conditions needed.
 v16-safe: sums grouped in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query passes
 an explicit order_by. Sector-neutral (no client literal — "department" == item_group, config-driven).
 """
@@ -40,14 +41,16 @@ def _data(filters):
 	elif filters.get("to_date"):
 		si_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the invoice set.
+	invoices = frappe.get_list(
 		"Sales Invoice", filters=si_filters, fields=["name"], order_by="posting_date desc"
 	)
 	if not invoices:
 		return []
 	inv_names = [i.name for i in invoices]
 
-	# group by item_group in PYTHON (no "sum(x) as y" field strings)
+	# group by item_group in PYTHON (no "sum(x) as y" field strings).
+	# get_all here is safe: child rows scoped to parents from the permission-checked get_list above.
 	qty = {}
 	revenue = {}
 	for li in frappe.get_all(

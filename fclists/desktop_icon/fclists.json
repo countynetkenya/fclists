@@ -8,7 +8,7 @@
  "icon_type": "App",
  "idx": 45,
  "label": "FCLists",
- "link": "/app/fclists",
+ "link": "/desk/fclists",
  "link_type": "External",
  "logo_url": "/assets/fclists/images/logo.svg",
  "modified": "2026-07-02 00:00:00.000000",

@@ -4,8 +4,9 @@ Every incoming Payment Entry (payment_type = Receive): posting_date, party, paid
 reference_no (the bank / M-Pesa transaction ref), and reference_date. The screen a bursar/cashier uses to
 reconcile the day's collections against the bank/M-Pesa statement.
 
-Security: ORM-only (frappe.get_all) → User Permissions enforced automatically (Finding B). No raw SQL, so no
-build_match_conditions needed. Role-gated on its Report doc (native Accounts roles + System Manager).
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager). The row
+query runs through frappe.get_list → read permission is checked and User Permissions scope the rows.
+No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
 """
 import frappe
@@ -47,7 +48,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		pe_filters["posting_date"] = ["<=", filters.to_date]
 
-	payments = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	payments = frappe.get_list(
 		"Payment Entry",
 		filters=pe_filters,
 		fields=[

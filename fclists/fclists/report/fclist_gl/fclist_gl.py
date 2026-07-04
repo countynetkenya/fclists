@@ -4,9 +4,10 @@ A fast, filterable window onto native GL Entry rows: posting date, account, debi
 type/no, party and remarks. The native GL Entry list is admin-oriented and unsorted for daily review; this
 Script Report gives the QuickBooks-style ledger scroll (newest first) with the columns an accountant scans.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. The report is role-gated on its Report doc (native Accounts roles + System
-Manager) — never world-readable.
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager) — never
+world-readable. The row query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows (a user permitted to Company A never sees Company B's ledger). No raw SQL,
+so no build_match_conditions needed.
 
 v16-safe: explicit order_by (posting_date desc, creation desc); no grouped-sum field strings. A bounded
 row limit keeps the ledger scroll responsive. Sector-neutral (no client literal).
@@ -52,7 +53,8 @@ def _data(filters):
 
 	limit = cint(filters.get("limit")) or 500
 
-	return frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the ledger rows.
+	return frappe.get_list(
 		"GL Entry",
 		filters=gle_filters,
 		fields=[

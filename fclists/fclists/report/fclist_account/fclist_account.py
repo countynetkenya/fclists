@@ -5,9 +5,11 @@ BALANCE as of a date (summed from GL Entry per company, in Python). The native A
 balance column — it is derived from the ledger against an as-of date — so this Script Report is the native
 tool.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. The report is role-gated on its Report doc (native Accounts roles + System
-Manager) — never world-readable.
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager) — never
+world-readable. The row-driving Account query runs through frappe.get_list → read permission is checked
+and User Permissions scope the rows (a user permitted to Company A never sees Company B's accounts); the
+balance aggregation then reads GL only for those already-permitted accounts. No raw SQL, so no
+build_match_conditions needed.
 
 v16-safe: balances are summed in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query
 passes an explicit order_by (tree order via lft, then name). Sector-neutral (no client literal).
@@ -41,7 +43,8 @@ def _data(filters):
 	if filters.get("root_type"):
 		acc_filters["root_type"] = filters.root_type
 
-	accounts = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the account rows.
+	accounts = frappe.get_list(
 		"Account",
 		filters=acc_filters,
 		fields=[
@@ -78,6 +81,8 @@ def _balances(filters, account_names):
 	gle_filters["posting_date"] = ["<=", as_of]
 
 	balances = {}
+	# get_all here is safe: scoped to account names that came from the permission-checked get_list
+	# above (Account is company-specific, so permitted accounts ⇒ permitted companies' GL only).
 	for gle in frappe.get_all(
 		"GL Entry",
 		filters=gle_filters,

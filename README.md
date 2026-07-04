@@ -9,8 +9,14 @@ View cannot give you out of the box:
    stock movement, AR/AP balances, aging buckets, live account balances, best-sellers by velocity — numbers
    that are *computed* from `Bin` / `Stock Ledger Entry` / `Batch` / `Sales Invoice` / `GL Entry` and therefore
    cannot appear as columns on a normal list. FCLists ships these as role-gated Script Reports over the
-   **native ERPNext doctypes** (Item, Bin, Stock Ledger Entry, Batch, Customer, Supplier, Account, GL Entry),
-   so they respect your permissions and User Permissions automatically.
+   **native ERPNext doctypes** (Item, Bin, Stock Ledger Entry, Batch, Customer, Supplier, Account, GL Entry).
+   **What is enforced:** your native **roles gate each report** (you must hold one of its roles to open it),
+   and every row-producing query runs permission-checked (`frappe.get_list`). **User Permissions scope the
+   rows for doctypes that carry the restricted link field** — a user restricted to Company A never sees
+   Company B's ledger, AR or sales rows (Sales/Purchase Invoice, Payment Entry, GL Entry, Account and Stock
+   Ledger Entry all carry `company`). Item- and Batch-driven boards have no company field, so they are
+   role-gated and read-checked but **not company-partitioned**. Column enrichments (prices, credit limits,
+   tender labels) describe rows you are already permitted to see.
 
 2. **QuickBooks-POS-style transaction histories.** Sales, POS, returns and payments presented the way a
    shopkeeper expects to read them — a running register of what was sold, returned and collected — built
@@ -57,8 +63,10 @@ To upgrade later, `bench get-app` again (or `git pull` in `apps/fclists`) and ru
 ## What each list gives you
 
 Reach any report from **Reports** (search its name in the awesomebar) or from the jump button FCLists
-adds to the matching desk List View. Each is a native Script Report — computed live from your own tables,
-filtered by your own permissions.
+adds to the matching desk List View. Each is a native Script Report — computed live from your own tables.
+Your roles gate whether a report opens at all; your User Permissions (e.g. a Company restriction) scope
+which rows it shows you *on doctypes that carry that link field* (invoices, payments, GL, accounts — the
+Item/Batch boards have no company field and are role-gated only).
 
 #### Wave-1 — stock boards & POS/sales histories
 

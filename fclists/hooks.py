@@ -12,13 +12,14 @@ app_license = "MIT"
 # else — never any Flowcore-family app (keep this list at exactly ["erpnext"]).
 required_apps = ["erpnext"]
 
-# Each item in the list will be shown as an app in the apps page
+# Each item in the list will be shown as an app in the apps page.
+# v16 route base is /desk/<workspace-slug> — never author /app/ URLs (flowcore-ui-standard §2.2).
 add_to_apps_screen = [
 	{
 		"name": "fclists",
 		"logo": "/assets/fclists/images/logo.svg",
 		"title": "FCLists",
-		"route": "/app/fclists",
+		"route": "/desk/fclists",
 	}
 ]
 

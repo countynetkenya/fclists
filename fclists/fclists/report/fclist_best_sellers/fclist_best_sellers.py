@@ -5,9 +5,11 @@ rank, item_code, item_name, item_group, qty_sold, revenue, margin. The native it
 units moved (it is derived from submitted Sales Invoice lines over a window), so this Script Report is the
 native tool.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. Role-gated on the Report doc (native Stock/Accounts roles + System
-Manager) — never world-readable.
+Security (Finding B): role-gated on the Report doc (native Stock/Accounts roles + System Manager) —
+never world-readable. The row-driving Sales Invoice query runs through frappe.get_list → read permission
+is checked and User Permissions scope the rows; a role admitted by the Report doc but WITHOUT Sales
+Invoice read permission gets an empty board (never a leak). Line/valuation lookups then read only for
+those already-permitted invoices/items.
 v16-safe: sums grouped in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query passes
 an explicit order_by. Sector-neutral (no client literal).
 """
@@ -40,7 +42,12 @@ def _data(filters):
 	si_filters = {"docstatus": 1, "posting_date": [">=", from_date], "is_return": 0}
 	if filters.get("company"):
 		si_filters["company"] = filters.company
-	invoices = frappe.get_all(
+	# The Report doc also admits Stock roles, which natively lack Sales Invoice read — degrade to an
+	# empty board for them rather than leak (or hard-error on) sales rows they cannot read.
+	if not frappe.has_permission("Sales Invoice"):
+		return []
+	# permission-checked (get_list): role read-perm + User Permissions scope the invoice set.
+	invoices = frappe.get_list(
 		"Sales Invoice", filters=si_filters, fields=["name"], order_by="posting_date desc"
 	)
 	if not invoices:
@@ -51,7 +58,8 @@ def _data(filters):
 	if filters.get("item_group"):
 		line_filters["item_group"] = filters.item_group
 
-	# aggregate qty / revenue / cost per item_code in PYTHON (no "sum(x) as y" field strings)
+	# aggregate qty / revenue / cost per item_code in PYTHON (no "sum(x) as y" field strings).
+	# get_all here is safe: child rows scoped to parents from the permission-checked get_list above.
 	qty = {}
 	revenue = {}
 	meta = {}
@@ -79,6 +87,7 @@ def _data(filters):
 	# Margin basis: value the sold qty at the item's current stock valuation (Bin) — a robust COGS proxy
 	# that avoids the version-fragile per-line cost field. Best-effort; 0 when the item carries no stock/
 	# valuation. Bin.valuation_rate is the same field the Item Stock report already reads successfully.
+	# get_all here is safe: a valuation ATTRIBUTE of items already on permitted invoice lines.
 	cost = {}
 	val = {}
 	for b in frappe.get_all(

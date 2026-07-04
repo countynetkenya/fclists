@@ -6,8 +6,10 @@ reorder level, and UNITS SOLD in the last N days (velocity — sum of submitted 
 filterable window). None of these can be shown by a plain list view, so this Script Report is the native
 tool (docs/trystorm-fclists.md Finding D).
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. The report is role-gated on its Report doc (never world-readable).
+Security (Finding B): role-gated on its Report doc (never world-readable). The row-driving Item query
+runs through frappe.get_list → read permission is checked and User Permissions scope the rows; on-hand /
+price / reorder lookups then read only for those already-permitted items. The velocity column reads Sales
+Invoice ONLY when the user holds read permission on it (Stock roles without it see 0, never a leak).
 
 v16-safe: sums are done in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query passes
 an explicit order_by. Sector-neutral (no client literal); gated by site_config fclists_enabled (default on).
@@ -47,37 +49,13 @@ def _columns():
 
 
 def _data(filters):
-	# --- on-hand + valuation from Bin, aggregated per item in PYTHON ----------------------------------
-	bin_filters = {}
-	if filters.get("warehouse"):
-		bin_filters["warehouse"] = filters.warehouse
-	elif filters.get("company"):
-		# Bin has no company column — scope by the warehouses that belong to the company.
-		allowed = [w.name for w in frappe.get_all(
-			"Warehouse", filters={"company": filters.company}, fields=["name"], order_by="name asc"
-		)]
-		if not allowed:
-			return []
-		bin_filters["warehouse"] = ["in", allowed]
-
-	bins = frappe.get_all(
-		"Bin",
-		filters=bin_filters,
-		fields=["item_code", "actual_qty", "valuation_rate", "stock_value"],
-		order_by="item_code asc",
-	)
-
-	on_hand = {}
-	stock_value = {}
-	for b in bins:
-		on_hand[b.item_code] = flt(on_hand.get(b.item_code, 0)) + flt(b.actual_qty)
-		stock_value[b.item_code] = flt(stock_value.get(b.item_code, 0)) + flt(b.stock_value)
-
 	# --- item master (drives the row set) ------------------------------------------------------------
+	# permission-checked (get_list): role read-perm + User Permissions scope the item rows. Every
+	# lookup below is keyed to these permitted item codes.
 	item_filters = {"disabled": 0, "is_stock_item": 1}
 	if filters.get("item_group"):
 		item_filters["item_group"] = filters.item_group
-	items = frappe.get_all(
+	items = frappe.get_list(
 		"Item",
 		filters=item_filters,
 		fields=["name", "item_name", "item_group", "stock_uom"],
@@ -87,7 +65,45 @@ def _data(filters):
 		return []
 	item_codes = [i.name for i in items]
 
+	# --- on-hand + valuation from Bin, aggregated per item in PYTHON ----------------------------------
+	# get_all here is safe: rows are intersected against the permitted item codes from the get_list
+	# above (on-hand is an ATTRIBUTE of already-permitted items). The item_code IN clause is only sent
+	# to SQL when an item_group filter has actually NARROWED the set — with no narrowing filter the
+	# permitted set is "every enabled stock item", and on a large catalog that IN list is a
+	# multi-megabyte query; fetching Bin unfiltered and intersecting in Python is strictly cheaper.
+	bin_filters = {}
+	if filters.get("item_group"):
+		bin_filters["item_code"] = ["in", item_codes]
+	if filters.get("warehouse"):
+		bin_filters["warehouse"] = filters.warehouse
+	elif filters.get("company"):
+		# Bin has no company column — scope by the warehouses that belong to the company (name lookup).
+		allowed = [w.name for w in frappe.get_all(
+			"Warehouse", filters={"company": filters.company}, fields=["name"], order_by="name asc"
+		)]
+		if not allowed:
+			return []
+		bin_filters["warehouse"] = ["in", allowed]
+
+	permitted = set(item_codes)
+	bins = [
+		b for b in frappe.get_all(
+			"Bin",
+			filters=bin_filters,
+			fields=["item_code", "actual_qty", "valuation_rate", "stock_value"],
+			order_by="item_code asc",
+		)
+		if b.item_code in permitted  # Python-side intersection — never widens beyond get_list's rows
+	]
+
+	on_hand = {}
+	stock_value = {}
+	for b in bins:
+		on_hand[b.item_code] = flt(on_hand.get(b.item_code, 0)) + flt(b.actual_qty)
+		stock_value[b.item_code] = flt(stock_value.get(b.item_code, 0)) + flt(b.stock_value)
+
 	# --- reorder level: max over the Item Reorder child rows, in PYTHON -------------------------------
+	# get_all here is safe: child rows of the permitted items only.
 	reorder = {}
 	for r in frappe.get_all(
 		"Item Reorder",
@@ -100,6 +116,9 @@ def _data(filters):
 			reorder[r.parent] = lvl
 
 	# --- selling price: Item Price on the default selling price list ----------------------------------
+	# get_all here is safe: the price is an ATTRIBUTE of already-permitted items (Item Price read is
+	# natively Master-Manager-only; routing it through get_list would blank the board's core column
+	# for the very Stock roles the Report doc admits).
 	price_list = _selling_price_list(filters)
 	selling = {}
 	if price_list:
@@ -151,7 +170,8 @@ def _data(filters):
 def _selling_price_list(filters):
 	if filters.get("price_list"):
 		return filters.price_list
-	# Selling Settings default, else the first enabled selling price list.
+	# Selling Settings default, else the first enabled selling price list (a NAME lookup for the
+	# default — reference data, not row data — so get_all is fine here).
 	pl = frappe.db.get_single_value("Selling Settings", "selling_price_list")
 	if pl:
 		return pl
@@ -166,12 +186,18 @@ def _selling_price_list(filters):
 
 
 def _units_sold(filters, item_codes):
+	# Cross-module enrichment: the Report doc admits Stock roles, which natively lack Sales Invoice
+	# read — degrade velocity to 0 for them rather than leak (or hard-error on) sales rows.
+	if not frappe.has_permission("Sales Invoice"):
+		return {}
 	days = cint(filters.get("window_days")) or 30
 	from_date = add_days(nowdate(), -days)
 	si_filters = {"docstatus": 1, "posting_date": [">=", from_date], "is_return": 0}
 	if filters.get("company"):
 		si_filters["company"] = filters.company
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the invoice set; the
+	# child-line get_all below is scoped to these permitted parents.
+	invoices = frappe.get_list(
 		"Sales Invoice", filters=si_filters, fields=["name"], order_by="posting_date desc"
 	)
 	if not invoices:

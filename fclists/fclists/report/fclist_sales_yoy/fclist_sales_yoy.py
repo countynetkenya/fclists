@@ -4,9 +4,10 @@ Four rows (Today, Week to Date, Month to Date, Year to Date). For each: this-yea
 over the SAME calendar period (same start-of-period → same offset-from-today one year back), and the %
 change. Windows are computed in PYTHON from posting_date so there are no raw-SQL date expressions.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. Role-gated on the Report doc (native Accounts roles + System Manager) —
-never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The window sums run through frappe.get_list → read permission is checked and User
+Permissions scope the rows (a user permitted to Company A sums only Company A's sales). No raw SQL,
+so no build_match_conditions needed.
 v16-safe: sums grouped in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query passes
 an explicit order_by. Sector-neutral (no client literal).
 """
@@ -66,7 +67,8 @@ def _sum_sales(company, start, end):
 	si_filters = {"docstatus": 1, "posting_date": ["between", [start, end]]}
 	if company:
 		si_filters["company"] = company
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the summed rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=["grand_total"],

@@ -4,7 +4,9 @@ Per item: item, item_group, on-hand (sum tabBin.actual_qty), reorder_level (max 
 shortfall (reorder_level - on_hand) and default_supplier. The reorder decision needs live Bin qty joined
 to the Item Reorder child rows — a plain list cannot compute it, so this is the native Script Report.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced. Role-gated on the Report doc.
+Security (Finding B): role-gated on the Report doc. The row-driving Item query runs through
+frappe.get_list → read permission is checked and User Permissions scope the rows; reorder-level and
+on-hand lookups are keyed to those already-permitted items only.
 v16-safe: sums in PYTHON; explicit order_by. Sector-neutral; gated by site_config fclists_enabled.
 """
 import frappe
@@ -42,6 +44,8 @@ def _columns():
 
 def _data(filters):
 	# --- reorder levels: max per item over Item Reorder child rows (PYTHON) ---------------------------
+	# get_all here only harvests CANDIDATE levels; a row is emitted below only for items that survive
+	# the permission-checked get_list on Item (so no unpermitted item ever reaches the board).
 	reorder_filters = {"parenttype": "Item", "warehouse_reorder_level": [">", 0]}
 	if filters.get("warehouse"):
 		reorder_filters["warehouse"] = filters.warehouse
@@ -63,9 +67,10 @@ def _data(filters):
 	item_filters = {"name": ["in", item_codes], "disabled": 0}
 	if filters.get("item_group"):
 		item_filters["item_group"] = filters.item_group
+	# permission-checked (get_list): role read-perm + User Permissions scope the item rows.
 	items = {
 		i.name: i
-		for i in frappe.get_all(
+		for i in frappe.get_list(
 			"Item",
 			filters=item_filters,
 			fields=["name", "item_name", "item_group", "default_supplier"],
@@ -76,6 +81,7 @@ def _data(filters):
 		return []
 
 	# --- on-hand from Bin, aggregated per item in PYTHON ---------------------------------------------
+	# get_all here is safe: scoped to the permitted item codes from the get_list above.
 	bin_filters = {"item_code": ["in", list(items.keys())]}
 	if filters.get("warehouse"):
 		bin_filters["warehouse"] = filters.warehouse

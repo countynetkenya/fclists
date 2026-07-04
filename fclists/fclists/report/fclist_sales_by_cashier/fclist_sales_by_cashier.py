@@ -4,9 +4,9 @@ Per cashier over a date range: invoice_count, total_sales, avg_sale. The `owner`
 user who created it — in a POS/counter workflow that is the cashier who rang the sale. The native list has
 no "group by owner with sum + average" view, so this Script Report is the native tool.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. Role-gated on the Report doc (native Accounts roles + System Manager) —
-never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The row query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows. No raw SQL, so no build_match_conditions needed.
 v16-safe: sums/averages grouped in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query
 passes an explicit order_by. Sector-neutral (no client literal).
 """
@@ -40,7 +40,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		si_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=["owner", "grand_total"],

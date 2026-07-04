@@ -16,9 +16,10 @@ Sector-neutral (no client literal); no dependency beyond ERPNext. Read-only page
 import frappe
 from frappe import _
 
-# The union of roles that gate at least one FClist report (see the report JSONs). A user who holds ANY of
-# these can open at least one FClist report, so they may read the guide. Kept in sync with the reports by
-# hand (there are nine of them); if a wave adds a report gated on a new native role, add it here too.
+# The union of roles that gate at least one FClist report (see the report JSONs — 22 reports across
+# Waves 1-3). A user who holds ANY of these can open at least one FClist report, so they may read the
+# guide. Kept in sync with the reports by hand; the hermetic test asserts this set equals the union of
+# every report JSON's roles table, so adding a report gated on a new native role fails fast here too.
 ALLOWED_ROLES = {
 	"System Manager",
 	"Stock Manager",
@@ -28,10 +29,19 @@ ALLOWED_ROLES = {
 }
 
 
+def has_guide_access(roles):
+	"""Pure predicate (hermetically tested): may a user holding `roles` read the guide?
+
+	True iff the role set intersects ALLOWED_ROLES. "Guest" is not an allowed role, so a guest
+	session can never qualify; get_context() additionally short-circuits Guest explicitly.
+	"""
+	return bool(ALLOWED_ROLES & set(roles or ()))
+
+
 def get_context(context):
 	# Guests have only the "Guest" role → the intersection is empty → PermissionError → Frappe sends them
 	# to /login and returns them here after sign-in. Signed-in users lacking every report role get a 403.
-	if frappe.session.user == "Guest" or not (ALLOWED_ROLES & set(frappe.get_roles())):
+	if frappe.session.user == "Guest" or not has_guide_access(frappe.get_roles()):
 		raise frappe.PermissionError(_("Please sign in with a Stock or Accounts role to view this guide."))
 
 	context.no_cache = 1

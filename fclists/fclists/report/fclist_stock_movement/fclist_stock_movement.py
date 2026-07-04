@@ -4,7 +4,8 @@ Per Stock Ledger Entry: posting_date, item, warehouse, voucher_type, voucher_no,
 positive), out_qty (abs actual_qty when negative), valuation_rate. A denser, split-column reading of the
 native Stock Ledger — the raw SLE list crams the signed qty into one column.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced. Role-gated on the Report doc.
+Security (Finding B): role-gated on the Report doc. The row query runs through frappe.get_list → read
+permission is checked and User Permissions scope the rows.
 v16-safe: explicit order_by (posting_date desc, then posting_time/creation desc for intra-day order);
 no raw SQL. Sector-neutral; gated by site_config fclists_enabled.
 """
@@ -54,7 +55,8 @@ def _data(filters):
 	if filters.get("warehouse"):
 		sle_filters["warehouse"] = filters.warehouse
 
-	entries = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	entries = frappe.get_list(
 		"Stock Ledger Entry",
 		filters=sle_filters,
 		fields=[

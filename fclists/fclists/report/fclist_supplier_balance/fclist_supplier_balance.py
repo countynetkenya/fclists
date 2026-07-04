@@ -5,9 +5,11 @@ outstanding_amount) and the PAST DUE portion (outstanding on invoices whose due_
 the QuickBooks "A/P Aging Summary" glance a payables clerk works down. The native Supplier list cannot
 show it — every figure is derived by aggregating Purchase Invoice rows against today's date.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions on Supplier / Purchase Invoice are
-enforced automatically. No raw SQL, so no build_match_conditions needed. Role-gated on the Report doc
-(native Accounts roles + System Manager) — never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The row-driving Purchase Invoice query runs through frappe.get_list → read permission
+is checked and User Permissions scope the rows (a user permitted to Company A never sees Company B's
+AP); the name lookup then reads only suppliers already on those permitted invoices. No raw SQL, so no
+build_match_conditions needed.
 
 v16-safe: sums are done in PYTHON; every query passes an explicit order_by. Sector-neutral; config-driven.
 """
@@ -37,7 +39,8 @@ def _data(filters):
 	if filters.get("supplier"):
 		pi_filters["supplier"] = filters.supplier
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the AP rows.
+	invoices = frappe.get_list(
 		"Purchase Invoice",
 		filters=pi_filters,
 		fields=["supplier", "outstanding_amount", "due_date"],
@@ -57,6 +60,7 @@ def _data(filters):
 	if not outstanding:
 		return []
 
+	# get_all here is safe: names are ATTRIBUTES of suppliers already on permitted invoices above.
 	sup_names = list(outstanding.keys())
 	supplier_name = {}
 	for s in frappe.get_all(

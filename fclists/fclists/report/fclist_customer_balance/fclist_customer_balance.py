@@ -7,9 +7,11 @@ outstanding on invoices whose due_date < today). QuickBooks shows exactly these 
 native Customer list cannot, because every figure is derived by aggregating Sales Invoice rows against
 today's date. This Script Report is the native tool.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions on Customer / Sales Invoice are
-enforced automatically. No raw SQL, so no build_match_conditions needed. Role-gated on the Report doc
-(native Accounts roles + System Manager) — never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The row-driving Sales Invoice query runs through frappe.get_list → read permission is
+checked and User Permissions scope the rows (a user permitted to Company A never sees Company B's AR);
+the name/credit-limit lookups then read only the customers already on those permitted invoices. No raw
+SQL, so no build_match_conditions needed.
 
 v16-safe: sums are done in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query
 passes an explicit order_by. Sector-neutral (no client literal); config-driven.
@@ -43,7 +45,8 @@ def _data(filters):
 	if filters.get("customer"):
 		si_filters["customer"] = filters.customer
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the AR rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=["customer", "outstanding_amount", "due_date"],
@@ -64,6 +67,8 @@ def _data(filters):
 		return []
 
 	# --- credit limit per customer (Customer.credit_limit — the global limit row) --------------------
+	# get_all below is safe: names/limits are ATTRIBUTES of customers already on permitted invoices
+	# from the permission-checked get_list above — never new rows.
 	cust_names = list(outstanding.keys())
 	credit_limit = {}
 	customer_name = {}

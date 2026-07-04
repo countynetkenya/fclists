@@ -5,9 +5,10 @@ bank/cash/mobile-money movements still sitting in the reconciliation queue. Gene
 it reads ONLY native Payment Entry fields (mode_of_payment, reference_no, paid_amount), so an M-PESA deposit
 booked as a Payment Entry appears here with no titan/settle dependency whatsoever.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL, so
-no build_match_conditions needed. The report is role-gated on its Report doc (native Accounts roles + System
-Manager) — never world-readable.
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager) — never
+world-readable. The row query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows (a user permitted to Company A never sees Company B's queue). No raw SQL,
+so no build_match_conditions needed.
 
 v16-safe: explicit order_by (posting_date desc, creation desc); no grouped-sum field strings. Sector-neutral
 (no client literal — reads native Payment Entry only).
@@ -50,7 +51,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		pe_filters["posting_date"] = ["<=", filters.to_date]
 
-	entries = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	entries = frappe.get_list(
 		"Payment Entry",
 		filters=pe_filters,
 		fields=[

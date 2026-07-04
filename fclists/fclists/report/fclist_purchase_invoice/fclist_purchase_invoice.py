@@ -5,9 +5,10 @@ status, and a computed OVERDUE flag (due_date < today AND outstanding_amount > 0
 Invoice list cannot show an "overdue" column because it is derived from two fields against today's date
 — this Script Report is the native tool.
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced automatically. No raw SQL,
-so no build_match_conditions needed. Role-gated on the Report doc (native Accounts roles + System
-Manager) — never world-readable.
+Security (Finding B): role-gated on the Report doc (native Accounts roles + System Manager) — never
+world-readable. The row query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows (a user permitted to Company A never sees Company B's AP). No raw SQL,
+so no build_match_conditions needed.
 
 v16-safe: explicit order_by; no grouped-sum field strings (overdue derived per row in Python).
 Sector-neutral; config-driven.
@@ -51,7 +52,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		pi_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
+	invoices = frappe.get_list(
 		"Purchase Invoice",
 		filters=pi_filters,
 		fields=[

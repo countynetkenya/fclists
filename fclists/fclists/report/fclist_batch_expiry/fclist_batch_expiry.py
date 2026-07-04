@@ -4,7 +4,12 @@ Per batch: batch_no, item, expiry_date, days_to_expiry, qty remaining (live from
 batch — Bin is per-item-per-warehouse, not per-batch), and a STATUS flag (Expired / Expiring<=Nd / OK).
 GENERIC — no sector literal (works for any perishable inventory, not just one vertical).
 
-Security (Finding B): ORM-only (frappe.get_all) → User Permissions enforced. Role-gated on the Report doc.
+Security (Finding B): role-gated on the Report doc. The row-driving Batch query runs through
+frappe.get_list → read permission is checked; the item-name and qty lookups then read only for those
+already-permitted batches. NOTE the honest scope: User Permissions restrict rows only for doctypes
+that CARRY the restricted link field — Batch has no company field, so a Company User Permission does
+NOT partition this board (it is role-gated + read-checked, not company-scoped; the company filter
+here narrows the SLE qty sum only).
 v16-safe: batch-qty sums done in PYTHON over SLE rows; explicit order_by (FEFO = expiry_date asc). Sector-
 neutral; gated by site_config fclists_enabled.
 """
@@ -44,7 +49,9 @@ def _data(filters):
 	batch_filters = {"expiry_date": ["is", "set"], "disabled": 0}
 	if filters.get("item"):
 		batch_filters["item"] = filters.item
-	batches = frappe.get_all(
+	# permission-checked (get_list): role read-perm. Batch carries no company field, so a Company
+	# User Permission does not scope these rows — role-gated + read-checked only (see module docstring).
+	batches = frappe.get_list(
 		"Batch",
 		filters=batch_filters,
 		fields=["name", "item", "expiry_date"],
@@ -54,6 +61,8 @@ def _data(filters):
 		return []
 
 	# --- item-group filter + item names (ORM lookup) -------------------------------------------------
+	# get_all here is safe: scoped to the items of batches that came from the permission-checked
+	# get_list above (attributes of already-permitted rows, not new rows).
 	item_codes = list({b.item for b in batches})
 	item_master_filters = {"name": ["in", item_codes]}
 	if filters.get("item_group"):
@@ -73,6 +82,7 @@ def _data(filters):
 		return []
 
 	# --- qty remaining per batch = sum of SLE actual_qty, in PYTHON ----------------------------------
+	# get_all here is safe: scoped to batch names from the permission-checked get_list above.
 	sle_filters = {"batch_no": ["in", batch_names], "is_cancelled": 0}
 	if filters.get("warehouse"):
 		sle_filters["warehouse"] = filters.warehouse

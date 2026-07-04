@@ -17,13 +17,30 @@ sector-neutral + config-not-fork + upgrade-safe. Four families of checks:
       NATIVE frappe core doctypes only; Insights may be LINKED at runtime but is NEVER required).
   (4) DEPENDENCY HYGIENE — required_apps == ["erpnext"] EXACTLY, and NO fclists source file imports
       flowcore / fcduka / titan_mpsa / titan / settle / leanorg (grep the whole tree).
+  (5) SECURITY DENY + ALLOW-AS-PERSONA (sw/testing.md §2 — a permission verifier without the denial
+      is a half-test, and an ALLOW proven only as Administrator is the other half-test):
+      a seeded ROLE-LESS user is REFUSED by the real runner (frappe.desk.query_report.run raises
+      PermissionError on a gated Accounts report AND a gated Stock report); the guide gate
+      (www/fclists-guide.get_context) refuses Guest + the role-less user while rendering for
+      Administrator; AND for EVERY report a throwaway user holding exactly ONE admitted non-admin
+      role runs it successfully through the runner (catches role tables that admit only DEAD roles —
+      e.g. a ref_doctype whose 'report' permission never reaches the roles the Report doc admits).
+  (6) USER-PERMISSION SCOPING — two throwaway Companies (Alpha/Beta) + an Accounts User restricted by a
+      User Permission to Alpha: the scoped user's FClist Account run returns Alpha rows and ZERO Beta rows
+      (Administrator first proves the Beta rows exist, so the DENY can never pass vacuously); explicitly
+      filtering for Beta returns nothing. Self-seeded, torn down in finally.
+  (7) SHELL FIXTURES ON SITE — Workspace / Workspace Sidebar / Desktop Icon / Dashboard / Dashboard Chart /
+      Number Card docs actually EXIST on the site (frappe.db.exists), not just as JSON files — a failed
+      fixture sync (the S033 sidebar-snapshot failure mode) goes RED here.
 
-Self-contained, idempotent, read-only (never writes/commits/migrates). Prints a numbered PASS/FAIL per
+Self-contained, idempotent; sections 1-4 + 7 are read-only, sections 5-6 seed neutral throwaway users/
+companies and tear them down (safe on a shared site with real data). Prints a numbered PASS/FAIL per
 check, a rolled-up "N/N", and a final "all_ok: true/false".
 
 Run:  bench --site group.localhost execute fclists.scripts._verify_fclists.run
 """
 
+import importlib
 import json
 import os
 import re
@@ -96,6 +113,16 @@ FORBIDDEN_APPS = ["flowcore", "fcduka", "titan_mpsa", "titan", "settle", "leanor
 # Client literals that must never appear in fclists source (sector-neutral, config-driven — D-002/D-024).
 FORBIDDEN_LITERALS = ["Vets", "Agrovet", "Busara", "Diamante"]
 
+# --- security-fixture constants (sections 5+6). NEUTRAL names only; every doc below is seeded by this
+# verifier and torn down in its finally block (safe + idempotent on a shared site with real data).
+DENY_USER = "fclists-verify-noroles@example.com"     # role-less → every gated report must REFUSE
+ALLOW_USER = "fclists-verify-persona@example.com"    # one admitted non-admin role at a time → must RUN
+SCOPED_USER = "fclists-verify-scoped@example.com"    # Accounts User, User-Permission-locked to Alpha
+COMPANY_ALPHA = "FCList Verify Co Alpha"             # abbr FCLVA — the scoped user's permitted company
+COMPANY_BETA = "FCList Verify Co Beta"               # abbr FCLVB — must stay INVISIBLE to the scoped user
+ABBR_ALPHA = "FCLVA"
+ABBR_BETA = "FCLVB"
+
 
 def _app_path():
 	"""Absolute path to the fclists app module dir (…/apps/fclists/fclists)."""
@@ -128,6 +155,96 @@ def _strip_js_comments(src):
 			continue
 		out.append(line)
 	return "\n".join(out)
+
+
+def _ensure_user(email, first_name, roles):
+	"""Create-or-reset a throwaway verifier user with EXACTLY the given roles (idempotent)."""
+	if not frappe.db.exists("User", email):
+		user = frappe.new_doc("User")
+		user.update({"email": email, "first_name": first_name, "send_welcome_email": 0, "enabled": 1})
+		user.flags.no_welcome_mail = True
+		user.insert(ignore_permissions=True)
+	user = frappe.get_doc("User", email)
+	user.set("roles", [])
+	for role in roles:
+		user.append("roles", {"role": role})
+	user.flags.ignore_permissions = True
+	user.save(ignore_permissions=True)
+	frappe.clear_cache(user=email)
+	return email
+
+
+def _ensure_company(name, abbr):
+	"""Create a throwaway Company (idempotent). Currency/country borrowed from the site's first company
+	so the verifier stays neutral on any bench (NO invented geography defaults — a site with no Company
+	fails RED with a clear message instead); on_trash cleanly deletes its CoA (no transactions)."""
+	if frappe.db.exists("Company", name):
+		return name
+	first = frappe.get_all(
+		"Company", fields=["default_currency", "country"], order_by="creation asc", limit=1
+	)
+	if not first or not (first[0].default_currency and first[0].country):
+		frappe.throw(
+			"site has no Company to borrow currency/country defaults from — seed one real "
+			"Company before running the fclists verifier (the fixture invents NO defaults)"
+		)
+	frappe.get_doc({
+		"doctype": "Company",
+		"company_name": name,
+		"abbr": abbr,
+		"default_currency": first[0].default_currency,
+		"country": first[0].country,
+	}).insert(ignore_permissions=True)
+	return name
+
+
+def _teardown_security_fixture():
+	"""Delete everything sections 5+6 seeded — leave the site as found. Each delete is individually
+	guarded so a partial failure never blocks the rest of the teardown."""
+	frappe.set_user("Administrator")
+	for up in frappe.get_all(
+		"User Permission", filters={"user": SCOPED_USER}, pluck="name", order_by="name asc"
+	):
+		try:
+			frappe.delete_doc("User Permission", up, force=True, ignore_permissions=True)
+		except Exception:
+			pass
+	for email in (DENY_USER, ALLOW_USER, SCOPED_USER):
+		# frappe auto-creates a Contact per new User — remove it too or re-runs accumulate orphans.
+		for contact in frappe.get_all("Contact", filters={"user": email}, pluck="name", order_by="name asc"):
+			try:
+				frappe.delete_doc("Contact", contact, force=True, ignore_permissions=True)
+			except Exception:
+				pass
+		if frappe.db.exists("User", email):
+			try:
+				frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+			except Exception:
+				pass
+	for comp in (COMPANY_BETA, COMPANY_ALPHA):
+		if not frappe.db.exists("Company", comp):
+			continue
+		# Company insert auto-creates departments + country tax templates; on_trash does not remove
+		# them — clear those first (departments leaf-first: NestedSet).
+		for dep in frappe.get_all(
+			"Department", filters={"company": comp}, pluck="name", order_by="lft desc"
+		):
+			try:
+				frappe.delete_doc("Department", dep, force=True, ignore_permissions=True)
+			except Exception:
+				pass
+		for tax_dt in (
+			"Sales Taxes and Charges Template", "Purchase Taxes and Charges Template", "Item Tax Template"
+		):
+			for tpl in frappe.get_all(tax_dt, filters={"company": comp}, pluck="name", order_by="name asc"):
+				try:
+					frappe.delete_doc(tax_dt, tpl, force=True, ignore_permissions=True)
+				except Exception:
+					pass
+		try:
+			frappe.delete_doc("Company", comp, force=True, ignore_permissions=True)
+		except Exception:
+			pass
 
 
 def run():
@@ -243,6 +360,12 @@ def run():
 		record(f"bi:fixture_scoped:{label}", prefixed,
 			f"{len(names)} row(s): {', '.join(names) if names else 'none'}")
 
+		# ON-SITE proof (S033 failure mode): each fixture row must actually EXIST as a doc on the site —
+		# a fixture that only lives as JSON (failed/never-run sync) is a shipped-but-dead shell.
+		for name in names:
+			record(f"bi:on_site:{label}:{name}", bool(frappe.db.exists(label, name)),
+				"exists on site" if frappe.db.exists(label, name) else "MISSING on site (fixture not synced)")
+
 		# No Frappe Insights / foreign-BI app referenced anywhere in the fixture JSON text.
 		hit = next((tok for tok in FORBIDDEN_BI_TOKENS if tok in raw), None)
 		record(f"bi:fixture_native_only:{label}", hit is None,
@@ -292,6 +415,139 @@ def run():
 		"clean" if not import_hits else "; ".join(sorted(set(import_hits))))
 	record("deps:no_client_literals", len(literal_hits) == 0,
 		"clean" if not literal_hits else "; ".join(sorted(set(literal_hits))))
+
+	# ----------------------------------------------------------------------------------------------
+	# (5) SECURITY DENY + ALLOW-AS-PERSONA + (6) USER-PERMISSION SCOPING — (3) proves each report
+	# executes as Administrator; here prove each DENY, that each report ALSO runs for a single admitted
+	# non-admin role (5c — Administrator-only execution masks dead role tables), and the row scope.
+	# Self-seeded neutral fixture; torn down in the finally. sw/testing.md §2: no half-tests.
+	# ----------------------------------------------------------------------------------------------
+	session_user = frappe.session.user
+	try:
+		frappe.set_user("Administrator")
+
+		# --- (5a) role-less user is REFUSED by the runner on a gated Accounts AND Stock report --------
+		_ensure_user(DENY_USER, "FCLists Verify NoRoles", [])
+		frappe.set_user(DENY_USER)
+		for rname in ("FClist GL", "FClist Item Stock"):
+			denied, detail = False, "runner returned data (NO refusal)"
+			try:
+				run_report(rname, filters={})
+			except frappe.PermissionError as e:
+				denied, detail = True, f"PermissionError: {str(e)[:80]}"
+			except Exception as e:  # noqa: BLE001 — wrong refusal type is a FAIL, not a pass
+				detail = f"{type(e).__name__}: {str(e)[:80]}"
+			record(f"deny:roleless_run_report:{rname}", denied, detail)
+		frappe.set_user("Administrator")
+
+		# --- (5b) guide gate: Guest + role-less REFUSED, Administrator renders ------------------------
+		guide = importlib.import_module("fclists.www.fclists-guide")
+		for label, guide_user in (("guest", "Guest"), ("roleless", DENY_USER)):
+			frappe.set_user(guide_user)
+			raised, detail = False, "get_context rendered (NO refusal)"
+			try:
+				guide.get_context(frappe._dict())
+			except frappe.PermissionError as e:
+				raised, detail = True, f"PermissionError: {str(e)[:80]}"
+			except Exception as e:  # noqa: BLE001
+				detail = f"{type(e).__name__}: {str(e)[:80]}"
+			record(f"deny:guide:{label}", raised, detail)
+			frappe.set_user("Administrator")
+		ctx = frappe._dict()
+		guide.get_context(ctx)
+		record("allow:guide_admin", ctx.get("title") == "FCLists — User Guide",
+			f"title={ctx.get('title')}")
+
+		# --- (5c) ALLOW-AS-PERSONA: every report must RUN for a user holding exactly ONE of the roles
+		# its Report doc admits (non-admin, so the check can never pass via System Manager's blanket
+		# access). This catches role tables that admit only DEAD roles — e.g. a ref_doctype whose
+		# 'report' permission is never granted to the admitted role, or a child-table ref_doctype for
+		# which has_permission(..., 'report') refuses every non-Administrator. Section 3's Administrator
+		# execution alone would mask all of those.
+		for rname in REPORTS:
+			if not frappe.db.exists("Report", rname):
+				record(f"allow:persona_run_report:{rname}", False, "report missing on site")
+				continue
+			admitted = [r.role for r in frappe.get_doc("Report", rname).roles]
+			non_admin = [r for r in admitted if r not in ("Administrator", "System Manager")]
+			persona = (non_admin or admitted or [None])[0]
+			if not persona:
+				record(f"allow:persona_run_report:{rname}", False, "no roles on the Report doc")
+				continue
+			_ensure_user(ALLOW_USER, "FCLists Verify Persona", [persona])
+			frappe.set_user(ALLOW_USER)
+			ok, detail = False, ""
+			try:
+				res = run_report(rname, filters={})
+				cols = res.get("columns") if isinstance(res, dict) else None
+				ok = bool(cols) and isinstance(res.get("result"), list)
+				detail = f"as {persona}: cols={bool(cols)}"
+			except Exception as e:  # noqa: BLE001 — a refused admitted persona is exactly the RED we want
+				detail = f"as {persona}: {type(e).__name__}: {str(e)[:120]}"
+			finally:
+				frappe.set_user("Administrator")
+			record(f"allow:persona_run_report:{rname}", ok, detail)
+
+		# --- (6) User-Permission scoping: Alpha-locked Accounts User never sees Beta rows --------------
+		_ensure_company(COMPANY_ALPHA, ABBR_ALPHA)
+		_ensure_company(COMPANY_BETA, ABBR_BETA)
+		_ensure_user(SCOPED_USER, "FCLists Verify Scoped", ["Accounts User"])
+		if not frappe.db.exists("User Permission",
+				{"user": SCOPED_USER, "allow": "Company", "for_value": COMPANY_ALPHA}):
+			frappe.get_doc({
+				"doctype": "User Permission",
+				"user": SCOPED_USER,
+				"allow": "Company",
+				"for_value": COMPANY_ALPHA,
+				"apply_to_all_doctypes": 1,
+			}).insert(ignore_permissions=True)
+		frappe.clear_cache(user=SCOPED_USER)
+
+		def _account_rows(filters=None):
+			res = run_report("FClist Account", filters=filters or {})
+			return [r for r in (res.get("result") or []) if isinstance(r, dict)]
+
+		# Baseline as Administrator: BOTH companies' auto-created accounts render — proves the Beta rows
+		# EXIST on the site, so the scoped DENY below can never pass vacuously.
+		names_admin = [str(r.get("name") or "") for r in _account_rows()]
+		admin_alpha = any(n.endswith(" - " + ABBR_ALPHA) for n in names_admin)
+		admin_beta = any(n.endswith(" - " + ABBR_BETA) for n in names_admin)
+		record("scope:admin_sees_both_companies", admin_alpha and admin_beta,
+			f"alpha={admin_alpha} beta={admin_beta} ({len(names_admin)} rows)")
+
+		frappe.set_user(SCOPED_USER)
+		names_scoped = [str(r.get("name") or "") for r in _account_rows()]
+		record("scope:scoped_sees_alpha",
+			any(n.endswith(" - " + ABBR_ALPHA) for n in names_scoped),
+			f"{len(names_scoped)} rows visible to the scoped user")
+		beta_leaks = [n for n in names_scoped if n.endswith(" - " + ABBR_BETA)]
+		record("scope:scoped_never_sees_beta", not beta_leaks,
+			"no Beta row leaked" if not beta_leaks else f"LEAKED: {', '.join(beta_leaks[:5])}")
+		# Explicitly requesting the forbidden company must yield ZERO rows (volume-independent proof —
+		# the User Permission ANDs with the filter, so no site growth can mask a leak).
+		beta_filtered = _account_rows({"company": COMPANY_BETA})
+		record("scope:beta_filter_returns_nothing", len(beta_filtered) == 0,
+			f"{len(beta_filtered)} rows for an explicit Beta filter")
+	except Exception as e:  # noqa: BLE001 — a crashed security section is a RED, never a silent skip
+		record("security:section_crashed", False, f"{type(e).__name__}: {str(e)[:200]}")
+	finally:
+		try:
+			_teardown_security_fixture()
+		except Exception as e:  # noqa: BLE001
+			record("security:teardown_failed", False, f"{type(e).__name__}: {str(e)[:200]}")
+		frappe.set_user(session_user if session_user else "Administrator")
+
+	# ----------------------------------------------------------------------------------------------
+	# (7) SHELL FIXTURES ON SITE — the Workspace / Sidebar / Desktop Icon must exist as DOCS (the BI
+	# fixtures are asserted on-site row-by-row in (3b) above). JSON-on-disk alone = dead shell (S033).
+	# ----------------------------------------------------------------------------------------------
+	record("shell:workspace_on_site", bool(frappe.db.exists("Workspace", "FCLists")),
+		"Workspace 'FCLists'")
+	record("shell:sidebar_on_site", bool(frappe.db.exists("Workspace Sidebar", "FCLists")),
+		"Workspace Sidebar 'FCLists'")
+	# Desktop Icon autonames by label — match by app so either naming lands.
+	record("shell:desktop_icon_on_site", bool(frappe.db.exists("Desktop Icon", {"app": "fclists"})),
+		"Desktop Icon app=fclists")
 
 	# ----------------------------------------------------------------------------------------------
 	# Roll-up + numbered PASS/FAIL print.

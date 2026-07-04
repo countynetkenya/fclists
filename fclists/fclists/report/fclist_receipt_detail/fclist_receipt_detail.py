@@ -10,8 +10,10 @@ Delta over the siblings: FClist Sales History is the flat header register (open/
 covers the native POS Invoice doctype. This report adds the LINE-ITEM drill-down and the per-receipt qty /
 tender / line-count density of the QB-POS detail screen, over Sales Invoice.
 
-Security: ORM-only (frappe.get_all) → User Permissions enforced automatically (Finding B). No raw SQL, so
-no build_match_conditions needed. Role-gated on its Report doc (native Accounts roles + System Manager).
+Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager). The
+row-driving Sales Invoice query runs through frappe.get_list → read permission is checked and User
+Permissions scope the rows; item/tender child rows are read only for those already-permitted receipts.
+No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
 """
 import frappe
@@ -72,7 +74,8 @@ def _data(filters):
 	elif filters.get("to_date"):
 		si_filters["posting_date"] = ["<=", filters.to_date]
 
-	invoices = frappe.get_all(
+	# permission-checked (get_list): role read-perm + User Permissions scope the receipt rows.
+	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=si_filters,
 		fields=[
@@ -83,6 +86,7 @@ def _data(filters):
 	)
 	names = [si.name for si in invoices]
 
+	# get_all below is safe: child rows scoped to parents from the permission-checked get_list above.
 	items_by_parent = {}
 	payments_by_parent = {}
 	if names:
