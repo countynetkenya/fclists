@@ -54,6 +54,26 @@ def _data(filters):
 		sle_filters["item_code"] = filters.item
 	if filters.get("warehouse"):
 		sle_filters["warehouse"] = filters.warehouse
+	# QB-POS parity (S059): split the one movement list by transaction type so a Quantity Adjustment
+	# history (voucher_type = Stock Reconciliation) and a Transfer history (Stock Entry of a given
+	# stock_entry_type) each read the SAME native ledger through their own lens — no shadow list.
+	if filters.get("voucher_type"):
+		sle_filters["voucher_type"] = filters.voucher_type
+	if filters.get("stock_entry_type"):
+		# stock_entry_type lives on Stock Entry, not the SLE, so resolve the voucher_nos in-window and
+		# scope the ledger to them (implies voucher_type = Stock Entry). Empty set → no rows, honestly.
+		se_names = frappe.get_all(
+			"Stock Entry",
+			filters={
+				"stock_entry_type": filters.stock_entry_type,
+				"docstatus": 1,
+				"posting_date": ["between", [from_date, to_date]],
+			},
+			pluck="name",
+			order_by="posting_date desc",
+		)
+		sle_filters["voucher_type"] = "Stock Entry"
+		sle_filters["voucher_no"] = ["in", se_names or [""]]
 
 	# permission-checked (get_list): role read-perm + User Permissions scope the rows.
 	entries = frappe.get_list(
