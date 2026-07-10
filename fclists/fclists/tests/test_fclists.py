@@ -75,6 +75,8 @@ REPORT_MODULES = {
 	# --- Wave 3 (QB-POS parity borrows — S035, live-gemba screens from the agrovet) -----------------
 	"FClist Payment Summary": "fclist_payment_summary",
 	"FClist Receipt Detail": "fclist_receipt_detail",
+	# --- D-070 (item-identity hygiene — normalized-name duplicate clustering) -----------------------
+	"FClist Duplicate Items": "fclist_duplicate_items",
 }
 
 # The Wave-2 report display names — used to scope Wave-2-only assertions without re-listing Wave 1.
@@ -98,6 +100,7 @@ REPORTS_WITH_ENABLE_GATE = {
 	"FClist Batch Expiry",
 	"FClist Reorder",
 	"FClist Stock Movement",
+	"FClist Duplicate Items",
 }
 
 # The doctypes any FCLists report column may legally reference (Link/Dynamic Link options).
