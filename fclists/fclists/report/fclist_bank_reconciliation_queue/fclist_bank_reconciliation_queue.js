@@ -15,6 +15,7 @@ frappe.query_reports["FClist Bank Reconciliation Queue"] = {
 			fieldtype: "Link",
 			options: "Mode of Payment",
 		},
+		fclists.periods.filter_def(),
 		{
 			fieldname: "from_date",
 			label: __("From Date"),

@@ -14,6 +14,7 @@ frappe.query_reports["FClist POS Invoice"] = {
 			fieldtype: "Link",
 			options: "POS Profile",
 		},
+		fclists.periods.filter_def(),
 		{
 			fieldname: "from_date",
 			label: __("From Date"),

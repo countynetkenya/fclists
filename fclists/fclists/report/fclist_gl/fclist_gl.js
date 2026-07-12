@@ -24,6 +24,7 @@ frappe.query_reports["FClist GL"] = {
 			label: __("Party"),
 			fieldtype: "Data",
 		},
+		fclists.periods.filter_def(),
 		{
 			fieldname: "from_date",
 			label: __("From Date"),

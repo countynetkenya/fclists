@@ -8,6 +8,7 @@ frappe.query_reports["FClist Payments"] = {
 			options: "Company",
 			default: frappe.defaults.get_user_default("Company"),
 		},
+		fclists.periods.filter_def(),
 		{
 			fieldname: "from_date",
 			label: __("From Date"),

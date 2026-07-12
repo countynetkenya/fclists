@@ -32,8 +32,17 @@ sector-neutral + config-not-fork + upgrade-safe. Four families of checks:
   (7) SHELL FIXTURES ON SITE — Workspace / Workspace Sidebar / Desktop Icon / Dashboard / Dashboard Chart /
       Number Card docs actually EXIST on the site (frappe.db.exists), not just as JSON files — a failed
       fixture sync (the S033 sidebar-snapshot failure mode) goes RED here.
+  (8) REPORT-PERIOD PRESET FILTER (yokoten of fcreports/fcreports/periods.py into FCLists' Query Report
+      filter paradigm) — public/js/fclists_periods.js exists and defines the PERIODS registry + resolve()
+      + filter_def(); it is declared in hooks.app_include_js (so every desk page has it, matching
+      fclists_lib.js's own wiring); fclists/periods.py exists, is whitelisted, and its resolve_fiscal_period
+      genuinely EXECUTES for both fiscal keys (returning a from_date/to_date pair even with no Fiscal Year
+      configured — the documented calendar-fallback contract) while rejecting an unknown key; and every
+      Script Report whose filters carry a from_date/to_date pair ALSO splices `fclists.periods.filter_def()`
+      into that same filters array (source-scanned — a report that grew its own date range after this
+      preset shipped, without wiring the preset, goes RED here instead of silently drifting).
 
-Self-contained, idempotent; sections 1-4 + 7 are read-only, sections 5-6 seed neutral throwaway users/
+Self-contained, idempotent; sections 1-4 + 7-8 are read-only, sections 5-6 seed neutral throwaway users/
 companies and tear them down (safe on a shared site with real data). Prints a numbered PASS/FAIL per
 check, a rolled-up "N/N", and a final "all_ok: true/false".
 
@@ -87,6 +96,25 @@ WAVE3_REPORTS = [
 # All reports the verifier gates (Wave-1 + Wave-2 + Wave-3). Existence / role-gating / execution apply to
 # every one.
 REPORTS = WAVE1_REPORTS + WAVE2_REPORTS + WAVE3_REPORTS
+
+# Reports whose filters carry a from_date/to_date pair — each of these MUST also splice
+# `fclists.periods.filter_def()` into its filters array (section 8). Keyed by DISPLAY NAME -> the report's
+# module-relative .js path (…/apps/fclists/fclists/fclists/report/<folder>/<folder>.js).
+DATE_RANGE_REPORT_JS = {
+	"FClist Bank Reconciliation Queue": "fclists/report/fclist_bank_reconciliation_queue/fclist_bank_reconciliation_queue.js",
+	"FClist GL": "fclists/report/fclist_gl/fclist_gl.js",
+	"FClist Payment Summary": "fclists/report/fclist_payment_summary/fclist_payment_summary.js",
+	"FClist Payments": "fclists/report/fclist_payments/fclist_payments.js",
+	"FClist POS Invoice": "fclists/report/fclist_pos_invoice/fclist_pos_invoice.js",
+	"FClist Purchase Invoice": "fclists/report/fclist_purchase_invoice/fclist_purchase_invoice.js",
+	"FClist Receipt Detail": "fclists/report/fclist_receipt_detail/fclist_receipt_detail.js",
+	"FClist Returns": "fclists/report/fclist_returns/fclist_returns.js",
+	"FClist Sales by Cashier": "fclists/report/fclist_sales_by_cashier/fclist_sales_by_cashier.js",
+	"FClist Sales by Department": "fclists/report/fclist_sales_by_department/fclist_sales_by_department.js",
+	"FClist Sales History": "fclists/report/fclist_sales_history/fclist_sales_history.js",
+	"FClist Sales Invoice": "fclists/report/fclist_sales_invoice/fclist_sales_invoice.js",
+	"FClist Stock Movement": "fclists/report/fclist_stock_movement/fclist_stock_movement.js",
+}
 
 # Wave-2 list-JS doctypes that MUST be declared in fclists.hooks.doctype_list_js (each resolves to a
 # *_list.js that EXTENDS native via fclists.extend_listview() — proven by the generic wiring loop below).
@@ -548,6 +576,69 @@ def run():
 	# Desktop Icon autonames by label — match by app so either naming lands.
 	record("shell:desktop_icon_on_site", bool(frappe.db.exists("Desktop Icon", {"app": "fclists"})),
 		"Desktop Icon app=fclists")
+
+	# ----------------------------------------------------------------------------------------------
+	# (8) REPORT-PERIOD PRESET FILTER — the QuickBooks-style "Report period" dropdown (yokoten of
+	# fcreports/fcreports/periods.py). Client-side registry/resolver present + wired into every report
+	# with a from_date/to_date pair; server-side fiscal companion present, whitelisted, and executes.
+	# ----------------------------------------------------------------------------------------------
+	periods_js_path = os.path.join(app_path, "public", "js", "fclists_periods.js")
+	periods_js_src = _read(periods_js_path)
+	record("periods:js_exists", periods_js_src is not None, "public/js/fclists_periods.js")
+	if periods_js_src is not None:
+		record("periods:js_defines_periods", "fclists.periods.PERIODS = [" in periods_js_src,
+			"defines fclists.periods.PERIODS")
+		record("periods:js_defines_resolve", "fclists.periods.resolve = function" in periods_js_src,
+			"defines fclists.periods.resolve")
+		record("periods:js_defines_filter_def", "fclists.periods.filter_def = function" in periods_js_src,
+			"defines fclists.periods.filter_def")
+
+	include_js = frappe.get_hooks("app_include_js", app_name="fclists") or []
+	record("periods:hooked_app_include_js",
+		any("fclists_periods.js" in str(p) for p in include_js),
+		f"app_include_js={list(include_js)}")
+
+	# Server-side fiscal companion — present on disk, whitelisted, and genuinely executes for BOTH fiscal
+	# keys (falling back to the calendar equivalent when no Fiscal Year is configured — never a crash),
+	# while an unknown key is rejected rather than silently resolved.
+	try:
+		periods_mod = importlib.import_module("fclists.periods")
+		record("periods:py_module_imports", True, "fclists.periods imports")
+		fn = getattr(periods_mod, "resolve_fiscal_period", None)
+		record("periods:py_defines_resolve_fiscal", callable(fn), "resolve_fiscal_period is callable")
+		is_wl = bool(fn and fn in frappe.whitelisted)
+		record("periods:py_resolve_fiscal_whitelisted", is_wl,
+			f"in frappe.whitelisted={is_wl}" if fn else "resolve_fiscal_period missing")
+		if fn:
+			for key in ("next_fiscal_quarter", "next_financial_year"):
+				try:
+					result = fn(key)
+					ok = (
+						isinstance(result, dict)
+						and bool(result.get("from_date"))
+						and bool(result.get("to_date"))
+					)
+					record(f"periods:py_resolves:{key}", ok, str(result))
+				except Exception as e:  # noqa: BLE001
+					record(f"periods:py_resolves:{key}", False, f"{type(e).__name__}: {e}")
+			try:
+				bad = fn("not_a_real_key")
+				record("periods:py_rejects_unknown_key", bad is None, f"got {bad!r} for an unknown key")
+			except Exception as e:  # noqa: BLE001
+				record("periods:py_rejects_unknown_key", False, f"{type(e).__name__}: {e}")
+	except Exception as e:  # noqa: BLE001
+		record("periods:py_module_imports", False, f"{type(e).__name__}: {e}")
+
+	# Every report with a from_date/to_date pair must ALSO splice fclists.periods.filter_def() into its
+	# filters array — a source-scan so a future date-range report can never silently skip the preset.
+	for rname, relpath in sorted(DATE_RANGE_REPORT_JS.items()):
+		fpath = os.path.join(app_path, relpath.replace("/", os.sep))
+		src = _read(fpath)
+		record(f"periods:report_file_exists:{rname}", src is not None, relpath)
+		if src is None:
+			continue
+		record(f"periods:report_wired:{rname}", "fclists.periods.filter_def(" in src,
+			"fclists.periods.filter_def(" if "fclists.periods.filter_def(" in src else "NOT wired")
 
 	# ----------------------------------------------------------------------------------------------
 	# Roll-up + numbered PASS/FAIL print.

@@ -20,6 +20,7 @@ frappe.query_reports["FClist Stock Movement"] = {
 			fieldtype: "Link",
 			options: "Warehouse",
 		},
+		fclists.periods.filter_def(),
 		{
 			fieldname: "from_date",
 			label: __("From Date"),

@@ -26,9 +26,13 @@ add_to_apps_screen = [
 # Includes in <head>
 # ------------------
 
-# The reusable loader primitive — defines frappe.provide("fclists") + fclists.extend_listview(...).
-# Loaded on every desk page so every *_list.js can safely EXTEND native listview_settings (Finding A).
-app_include_js = ["/assets/fclists/js/fclists_lib.js"]
+# The reusable loader primitives:
+#   fclists_lib.js     — defines frappe.provide("fclists") + fclists.extend_listview(...) (Finding A).
+#   fclists_periods.js — defines fclists.periods.* — the QuickBooks-style "Report period" preset date
+#                         filter every Script Report with from_date/to_date splices in (yokoten of
+#                         fcreports/fcreports/periods.py into FCLists' Query Report filter paradigm).
+# Loaded on every desk page so every report/list-view file can rely on both without its own <script> tag.
+app_include_js = ["/assets/fclists/js/fclists_lib.js", "/assets/fclists/js/fclists_periods.js"]
 
 # include js in doctype list views (Wave-1 doctypes only).
 # Each of these files EXTENDS the native listview via fclists.extend_listview() — never a bare
