@@ -12,10 +12,16 @@ No raw SQL, so no build_match_conditions needed.
 
 v16-safe: explicit order_by; no grouped-sum field strings (buckets computed per row in Python).
 Sector-neutral; config-driven.
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters Sales Invoice's own header cost_center field.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, nowdate, date_diff
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -51,8 +57,12 @@ def _bucket(days_past_due):
 
 def _data(filters):
 	si_filters = {"docstatus": 1, "outstanding_amount": [">", 0]}
-	if filters.get("company"):
-		si_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		si_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		si_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("customer"):
 		si_filters["customer"] = filters.customer
 

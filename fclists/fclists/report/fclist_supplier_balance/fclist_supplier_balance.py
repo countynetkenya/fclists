@@ -12,10 +12,17 @@ AP); the name lookup then reads only suppliers already on those permitted invoic
 build_match_conditions needed.
 
 v16-safe: sums are done in PYTHON; every query passes an explicit order_by. Sector-neutral; config-driven.
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. No Cost Centre filter this wave — ref_doctype is Supplier, a MASTER doctype with no cost_center
+column of its own; see the yokoten applicability table.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, nowdate
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -34,8 +41,9 @@ def _columns():
 
 def _data(filters):
 	pi_filters = {"docstatus": 1, "outstanding_amount": [">", 0]}
-	if filters.get("company"):
-		pi_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		pi_filters["company"] = ["in", companies]
 	if filters.get("supplier"):
 		pi_filters["supplier"] = filters.supplier
 

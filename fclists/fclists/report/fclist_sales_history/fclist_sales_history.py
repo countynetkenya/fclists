@@ -10,11 +10,17 @@ the actual receipt reprint — we do not rebuild printing (anti-reinvention).
 Security (Finding B): role-gated on its Report doc (native Accounts roles + System Manager). The row
 query runs through frappe.get_list → read permission is checked and User Permissions scope the rows.
 No raw SQL, so no build_match_conditions needed.
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters Sales Invoice's own header cost_center field (the invoice's default dimension).
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -39,8 +45,12 @@ def _columns():
 
 def _data(filters):
 	si_filters = {"docstatus": 1}
-	if filters.get("company"):
-		si_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		si_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		si_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("customer"):
 		si_filters["customer"] = filters.customer
 	if filters.get("owner"):

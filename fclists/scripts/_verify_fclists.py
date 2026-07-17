@@ -641,6 +641,38 @@ def run():
 			"fclists.periods.filter_def(" if "fclists.periods.filter_def(" in src else "NOT wired")
 
 	# ----------------------------------------------------------------------------------------------
+	# (9) TREE-CHECKBOX COMPANY FILTER (2026-07-17 yokoten of the fcbi/fcbi/consolidate.py pattern via
+	# fclists.nav_options — see that module's docstring for the full pattern-source citation). Confines-
+	# not-expands proof on FClist GL (the simplest of the 9 upgraded reports — a straight GL Entry
+	# `company IN (...)` filter, no join): the unfiltered run must return MORE THAN ZERO rows (else the
+	# "filtered <= unfiltered" inequality would pass vacuously on an empty site), and filtering to a
+	# single real Company via the NEW `companies` MultiSelectList list-arg must return a row count that is
+	# both > 0 and <= the unfiltered count — never more (a filter that let MORE rows through would be a
+	# broken WHERE clause, not a working confinement). Read-only; no fixture seeded/torn down (borrows
+	# whatever real Company already exists on the site — this app's own CLAUDE.md requires at least one).
+	# ----------------------------------------------------------------------------------------------
+	try:
+		probe_company = frappe.db.get_value("Company", {}, "name", order_by="creation asc")
+		if not probe_company:
+			record("companies_filter:gl_confines", False, "no Company exists on this site to probe with")
+		else:
+			unfiltered = run_report("FClist GL", filters={})
+			unfiltered_rows = unfiltered.get("result") if isinstance(unfiltered, dict) else None
+			unfiltered_n = len(unfiltered_rows) if isinstance(unfiltered_rows, list) else 0
+			record("companies_filter:gl_unfiltered_nonempty", unfiltered_n > 0,
+				f"{unfiltered_n} unfiltered GL row(s) (probe company={probe_company})")
+
+			filtered = run_report("FClist GL", filters={"companies": [probe_company]})
+			filtered_rows = filtered.get("result") if isinstance(filtered, dict) else None
+			filtered_n = len(filtered_rows) if isinstance(filtered_rows, list) else 0
+			record("companies_filter:gl_filtered_nonempty", filtered_n > 0,
+				f"{filtered_n} row(s) for companies=[{probe_company}]")
+			record("companies_filter:gl_confines", filtered_n <= unfiltered_n,
+				f"filtered={filtered_n} <= unfiltered={unfiltered_n}")
+	except Exception as e:  # noqa: BLE001
+		record("companies_filter:gl_confines", False, f"{type(e).__name__}: {e}")
+
+	# ----------------------------------------------------------------------------------------------
 	# Roll-up + numbered PASS/FAIL print.
 	# ----------------------------------------------------------------------------------------------
 	total = len(checks)

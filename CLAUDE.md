@@ -46,6 +46,16 @@ Purchasing/AP-AR: `purchase_invoice` · `receiving` · `open_invoices` · `custo
 Stock: `item_stock` · `stock_movement` · `reorder` · `batch_expiry` · `cost_adjustment` · `duplicate_items`.
 Finance: `gl` · `account` · `bank_reconciliation_queue`.
 
+- **Tree-checkbox Companies/Cost Centre filter (2026-07-17):** `fclists/fclists/nav_options.py` — fclists'
+  OWN thin copy (clean-room, no import) of the `fcbi/fcbi/consolidate.py` tree-checkbox pattern
+  (`company_tree_options` / `cost_centre_tree_options` MultiSelectList providers + `resolve_companies_filter`
+  / `resolve_cost_centre_filter` server-side resolvers). Wired on the 9 top-value ledger reports (`gl`,
+  `sales_history`, `open_invoices`, `payments`, `sales_invoice`, `purchase_invoice`, `pos_invoice`,
+  `customer_balance`, `supplier_balance`) — the new `companies` filter wins, the legacy single `company` Link
+  stays as fallback; `cost_center` added only where the underlying doctype carries it (GL Entry always;
+  Sales/Purchase/POS Invoice header). The other 17 reports (masters, stock, and reports outside this wave)
+  are untouched.
+
 ## Desk surface + fixtures (D-073 nav standard)
 
 - **Workspace `FCLists`** (`fclists/fclists/workspace/fclists/`) — surface class **`app-domain`** (Records · Reports · Lists · Guide); single-source icon; **`Workspace Sidebar` shipped as a fixture** (else desk auto-snapshots + freezes a stale sidebar on first visit — S033 bug).

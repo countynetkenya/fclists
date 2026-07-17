@@ -10,10 +10,16 @@ world-readable. The row query runs through frappe.get_list → read permission i
 Permissions scope the rows (a user permitted to Company A never sees Company B's invoices). No raw
 SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; no grouped-sum field strings (the total row is summed in Python).
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters Sales Invoice's own header cost_center field.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, nowdate
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -37,8 +43,12 @@ def _columns():
 
 def _data(filters):
 	si_filters = {"docstatus": 1}
-	if filters.get("company"):
-		si_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		si_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		si_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("customer"):
 		si_filters["customer"] = filters.customer
 	if filters.get("status"):

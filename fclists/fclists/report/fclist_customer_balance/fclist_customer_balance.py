@@ -15,10 +15,17 @@ SQL, so no build_match_conditions needed.
 
 v16-safe: sums are done in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query
 passes an explicit order_by. Sector-neutral (no client literal); config-driven.
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. No Cost Centre filter this wave — ref_doctype is Customer, a MASTER doctype with no cost_center
+column of its own (unlike GL Entry / Sales-Purchase/POS Invoice); see the yokoten applicability table.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, nowdate
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -40,8 +47,9 @@ def _columns():
 def _data(filters):
 	# --- outstanding AR per customer, aggregated in PYTHON from submitted Sales Invoices --------------
 	si_filters = {"docstatus": 1, "outstanding_amount": [">", 0]}
-	if filters.get("company"):
-		si_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		si_filters["company"] = ["in", companies]
 	if filters.get("customer"):
 		si_filters["customer"] = filters.customer
 
@@ -81,8 +89,9 @@ def _data(filters):
 		customer_name[c.name] = c.customer_name
 
 	# Credit limit lives on the child table `Customer Credit Limit` (per company) in v16 — NOT on Customer.
-	# Prefer the row matching the filtered company; else the first non-zero limit seen (company-agnostic).
-	company = filters.get("company")
+	# Prefer the row matching a filtered company (legacy `company`, else the first resolved `companies`
+	# entry — a hint only, never a second gate); else the first non-zero limit seen (company-agnostic).
+	company = filters.get("company") or (companies[0] if companies else None)
 	for cl in frappe.get_all(
 		"Customer Credit Limit",
 		filters={"parent": ["in", cust_names], "parenttype": "Customer"},

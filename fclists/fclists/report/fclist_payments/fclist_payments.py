@@ -8,10 +8,18 @@ Security (Finding B): role-gated on its Report doc (native Accounts roles + Syst
 query runs through frappe.get_list → read permission is checked and User Permissions scope the rows.
 No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. No Cost Centre filter this wave — Payment Entry carries no header cost_center field (unlike GL
+Entry / Sales-Purchase/POS Invoice), so adding one here would need a rewrite (join to GL Entry by
+voucher), which is explicitly out of scope for this pass — see the yokoten applicability table.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -35,8 +43,9 @@ def _columns():
 
 def _data(filters):
 	pe_filters = {"docstatus": 1, "payment_type": "Receive"}
-	if filters.get("company"):
-		pe_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		pe_filters["company"] = ["in", companies]
 	if filters.get("mode_of_payment"):
 		pe_filters["mode_of_payment"] = filters.mode_of_payment
 	if filters.get("party"):

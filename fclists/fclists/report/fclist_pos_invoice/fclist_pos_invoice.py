@@ -11,10 +11,16 @@ Permissions scope the rows; tender child rows are read only for those already-pe
 No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; per-invoice tender totals summed in PYTHON (frappe get_all rejects
 "sum(x) as y" field strings); read-only.
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters POS Invoice's own header cost_center field.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -38,8 +44,12 @@ def _columns():
 
 def _data(filters):
 	pos_filters = {"docstatus": 1}
-	if filters.get("company"):
-		pos_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		pos_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		pos_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("pos_profile"):
 		pos_filters["pos_profile"] = filters.pos_profile
 	if filters.get("from_date") and filters.get("to_date"):
