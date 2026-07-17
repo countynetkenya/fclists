@@ -1,7 +1,10 @@
-// FClist Reorder — filters. Items at or below reorder level (buy-list board).
+// FClist Held Documents — parked NATIVE drafts board filters. QB-POS "Held" parity.
 // Companies (2026-07-17): tree-checkbox MultiSelectList yokoten — see fclist_gl.js's header comment for
-// the full pattern-source note. No Cost Centre filter this wave — see fclist_reorder.py's docstring.
-frappe.query_reports["FClist Reorder"] = {
+// the full pattern-source note. No Cost Centre filter this wave — see fclist_held_documents.py's docstring.
+// FIRST .js FILE for this report (wave-1 shipped it with a `.py` that read filters.get(...) but no filter
+// UI at all); this file closes that gap while wiring the new companies filter, exposing every filter the
+// controller already reads (owner / limit).
+frappe.query_reports["FClist Held Documents"] = {
 	filters: [
 		{
 			fieldname: "companies",
@@ -21,16 +24,16 @@ frappe.query_reports["FClist Reorder"] = {
 			default: frappe.defaults.get_user_default("Company"),
 		},
 		{
-			fieldname: "warehouse",
-			label: __("Warehouse"),
+			fieldname: "owner",
+			label: __("Owner"),
 			fieldtype: "Link",
-			options: "Warehouse",
+			options: "User",
 		},
 		{
-			fieldname: "item_group",
-			label: __("Item Group"),
-			fieldtype: "Link",
-			options: "Item Group",
+			fieldname: "limit",
+			label: __("Limit (per doctype)"),
+			fieldtype: "Int",
+			default: 200,
 		},
 	],
 };

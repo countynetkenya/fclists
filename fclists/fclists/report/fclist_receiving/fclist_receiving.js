@@ -1,7 +1,10 @@
-// FClist Stock Movement — filters. Recent ledger moves, in/out split.
+// FClist Receiving — line-level goods-received register filters. QB-POS "Received Items" parity.
 // Companies (2026-07-17): tree-checkbox MultiSelectList yokoten — see fclist_gl.js's header comment for
-// the full pattern-source note. No Cost Centre filter this wave — see fclist_stock_movement.py's docstring.
-frappe.query_reports["FClist Stock Movement"] = {
+// the full pattern-source note. No Cost Centre filter this wave — see fclist_receiving.py's docstring.
+// FIRST .js FILE for this report (wave-1 shipped it with a `.py` that read filters.get(...) but no filter
+// UI at all); this file closes that gap while wiring the new companies filter, exposing every filter the
+// controller already reads (supplier / item / window_days / from_date / to_date).
+frappe.query_reports["FClist Receiving"] = {
 	filters: [
 		{
 			fieldname: "companies",
@@ -21,29 +24,33 @@ frappe.query_reports["FClist Stock Movement"] = {
 			default: frappe.defaults.get_user_default("Company"),
 		},
 		{
+			fieldname: "supplier",
+			label: __("Supplier"),
+			fieldtype: "Link",
+			options: "Supplier",
+		},
+		{
 			fieldname: "item",
 			label: __("Item"),
 			fieldtype: "Link",
 			options: "Item",
-		},
-		{
-			fieldname: "warehouse",
-			label: __("Warehouse"),
-			fieldtype: "Link",
-			options: "Warehouse",
 		},
 		fclists.periods.filter_def(),
 		{
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
-			default: frappe.datetime.add_days(frappe.datetime.get_today(), -30),
 		},
 		{
 			fieldname: "to_date",
 			label: __("To Date"),
 			fieldtype: "Date",
-			default: frappe.datetime.get_today(),
+		},
+		{
+			fieldname: "window_days",
+			label: __("Window (days, used only when From/To Date are empty)"),
+			fieldtype: "Int",
+			default: 30,
 		},
 	],
 };

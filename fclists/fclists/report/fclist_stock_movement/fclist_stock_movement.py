@@ -8,10 +8,17 @@ Security (Finding B): role-gated on the Report doc. The row query runs through f
 permission is checked and User Permissions scope the rows.
 v16-safe: explicit order_by (posting_date desc, then posting_time/creation desc for intra-day order);
 no raw SQL. Sector-neutral; gated by site_config fclists_enabled.
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. No Cost Centre filter this wave — a stock ledger move is not cost-centre attributed the way a
+ledger/invoice row is; out of scope per the yokoten applicability table.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, cint, add_days, nowdate
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -48,8 +55,9 @@ def _data(filters):
 		"is_cancelled": 0,
 		"posting_date": ["between", [from_date, to_date]],
 	}
-	if filters.get("company"):
-		sle_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		sle_filters["company"] = ["in", companies]
 	if filters.get("item"):
 		sle_filters["item_code"] = filters.item
 	if filters.get("warehouse"):

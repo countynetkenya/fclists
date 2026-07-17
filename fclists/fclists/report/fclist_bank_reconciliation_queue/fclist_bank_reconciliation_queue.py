@@ -12,9 +12,16 @@ so no build_match_conditions needed.
 
 v16-safe: explicit order_by (posting_date desc, creation desc); no grouped-sum field strings. Sector-neutral
 (no client literal — reads native Payment Entry only).
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters Payment Entry's own header cost_center field — bench-proven present on
+Payment Entry (same fact that overturned fclist_payments.py's wave-1 exclusion).
 """
 import frappe
 from frappe import _
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -40,8 +47,12 @@ def _columns():
 def _data(filters):
 	# Unreconciled = submitted Payment Entry with no clearance_date. Read native fields only.
 	pe_filters = {"docstatus": 1, "clearance_date": ["is", "not set"]}
-	if filters.get("company"):
-		pe_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		pe_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		pe_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("mode_of_payment"):
 		pe_filters["mode_of_payment"] = filters.mode_of_payment
 	if filters.get("from_date") and filters.get("to_date"):

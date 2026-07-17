@@ -13,10 +13,20 @@ drafts). No raw SQL, so no build_match_conditions needed.
 
 v16-safe: explicit order_by on every read; a limit per doctype so an unfiltered open is bounded;
 read-only. Sector-neutral; gated by site_config ``fclists_enabled``.
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link, applied identically across all three ``_HELD_DOCTYPES`` (each carries a native `company` field). No
+Cost Centre filter this wave — a parked draft is not a ledger/invoice row; out of scope per the yokoten
+applicability table. A `.js` filter file is added here for the first time (this report previously read
+`filters.get("company")` etc. with no filter UI at all — a pre-existing gap, now closed as part of
+wiring the new companies filter).
 """
 import frappe
 from frappe import _
 from frappe.utils import cint
+
+from fclists.nav_options import resolve_companies_filter
 
 # The three native doctypes a till can park a draft in (docstatus 0 = held, not yet posted). Purely
 # native erpnext doctypes — no fcduka import (fclists LAW).
@@ -47,11 +57,12 @@ def _columns():
 
 def _data(filters):
 	limit = cint(filters.get("limit")) or 200
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
 	rows = []
 	for dt in _HELD_DOCTYPES:
 		dt_filters = {"docstatus": 0}
-		if filters.get("company"):
-			dt_filters["company"] = filters.company
+		if companies:
+			dt_filters["company"] = ["in", companies]
 		if filters.get("owner"):
 			dt_filters["owner"] = filters.owner
 

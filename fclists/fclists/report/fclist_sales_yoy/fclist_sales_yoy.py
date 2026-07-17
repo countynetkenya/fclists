@@ -10,12 +10,19 @@ Permissions scope the rows (a user permitted to Company A sums only Company A's 
 so no build_match_conditions needed.
 v16-safe: sums grouped in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query passes
 an explicit order_by. Sector-neutral (no client literal).
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters Sales Invoice's own header cost_center field. Resolved ONCE in `_data` (not
+per-period) and passed down to `_sum_sales` for both the this-year and last-year window sums.
 """
 import datetime
 
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, nowdate
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -63,10 +70,12 @@ def _periods(today):
 	return out
 
 
-def _sum_sales(company, start, end):
+def _sum_sales(companies, cost_centers, start, end):
 	si_filters = {"docstatus": 1, "posting_date": ["between", [start, end]]}
-	if company:
-		si_filters["company"] = company
+	if companies:
+		si_filters["company"] = ["in", companies]
+	if cost_centers:
+		si_filters["cost_center"] = ["in", cost_centers]
 	# permission-checked (get_list): role read-perm + User Permissions scope the summed rows.
 	invoices = frappe.get_list(
 		"Sales Invoice",
@@ -79,13 +88,14 @@ def _sum_sales(company, start, end):
 
 
 def _data(filters):
-	company = filters.get("company")
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
 	today = getdate(nowdate())
 
 	rows = []
 	for label, ty_start, ty_end, ly_start, ly_end in _periods(today):
-		ty = _sum_sales(company, ty_start, ty_end)
-		ly = _sum_sales(company, ly_start, ly_end)
+		ty = _sum_sales(companies, cost_centers, ty_start, ty_end)
+		ly = _sum_sales(companies, cost_centers, ly_start, ly_end)
 		change = ty - ly
 		rows.append({
 			"period": label,

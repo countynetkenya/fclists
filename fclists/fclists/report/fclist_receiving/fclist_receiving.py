@@ -15,10 +15,19 @@ Company B's receipts); the item child rows are read ONLY for those already-permi
 v16-safe: explicit order_by on every read; a window_days default so an unfiltered open is bounded;
 read-only. Sector-neutral; gated by site_config ``fclists_enabled``. Purchase Receipt is a NATIVE erpnext
 doctype, so this report lives in clean-room fclists (erpnext-only dep, no fcduka import).
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. No Cost Centre filter this wave — a receiving line's revaluation basis is not cost-centre
+attributed the way a ledger/invoice row is; out of scope per the yokoten applicability table. A `.js`
+filter file is added here for the first time (this report previously read `filters.get("company")` etc.
+with no filter UI at all — a pre-existing gap, now closed as part of wiring the new companies filter).
 """
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, flt, nowdate
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -56,8 +65,9 @@ def _data(filters):
 		"docstatus": 1,
 		"posting_date": ["between", [from_date, to_date]],
 	}
-	if filters.get("company"):
-		pr_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		pr_filters["company"] = ["in", companies]
 	if filters.get("supplier"):
 		pr_filters["supplier"] = filters.supplier
 

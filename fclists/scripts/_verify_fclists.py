@@ -102,12 +102,14 @@ REPORTS = WAVE1_REPORTS + WAVE2_REPORTS + WAVE3_REPORTS
 # module-relative .js path (…/apps/fclists/fclists/fclists/report/<folder>/<folder>.js).
 DATE_RANGE_REPORT_JS = {
 	"FClist Bank Reconciliation Queue": "fclists/report/fclist_bank_reconciliation_queue/fclist_bank_reconciliation_queue.js",
+	"FClist Cost Adjustment": "fclists/report/fclist_cost_adjustment/fclist_cost_adjustment.js",
 	"FClist GL": "fclists/report/fclist_gl/fclist_gl.js",
 	"FClist Payment Summary": "fclists/report/fclist_payment_summary/fclist_payment_summary.js",
 	"FClist Payments": "fclists/report/fclist_payments/fclist_payments.js",
 	"FClist POS Invoice": "fclists/report/fclist_pos_invoice/fclist_pos_invoice.js",
 	"FClist Purchase Invoice": "fclists/report/fclist_purchase_invoice/fclist_purchase_invoice.js",
 	"FClist Receipt Detail": "fclists/report/fclist_receipt_detail/fclist_receipt_detail.js",
+	"FClist Receiving": "fclists/report/fclist_receiving/fclist_receiving.js",
 	"FClist Returns": "fclists/report/fclist_returns/fclist_returns.js",
 	"FClist Sales by Cashier": "fclists/report/fclist_sales_by_cashier/fclist_sales_by_cashier.js",
 	"FClist Sales by Department": "fclists/report/fclist_sales_by_department/fclist_sales_by_department.js",
@@ -671,6 +673,62 @@ def run():
 				f"filtered={filtered_n} <= unfiltered={unfiltered_n}")
 	except Exception as e:  # noqa: BLE001
 		record("companies_filter:gl_confines", False, f"{type(e).__name__}: {e}")
+
+	# --- (9b) Wave-2 companies-leg: FClist Stock Movement (a report upgraded THIS wave, joined straight
+	# onto Stock Ledger Entry.company — no Warehouse join needed) must also CONFINE, never expand, under
+	# the same `companies` MultiSelectList list-arg. Same vacuity guard as 9's GL proof (unfiltered must be
+	# non-empty first) so "filtered <= unfiltered" can never pass on an empty site.
+	try:
+		probe_company_sm = frappe.db.get_value("Company", {}, "name", order_by="creation asc")
+		if not probe_company_sm:
+			record("companies_filter:stock_movement_confines", False,
+				"no Company exists on this site to probe with")
+		else:
+			unfiltered = run_report("FClist Stock Movement", filters={})
+			unfiltered_rows = unfiltered.get("result") if isinstance(unfiltered, dict) else None
+			unfiltered_n = len(unfiltered_rows) if isinstance(unfiltered_rows, list) else 0
+			record("companies_filter:stock_movement_unfiltered_nonempty", unfiltered_n > 0,
+				f"{unfiltered_n} unfiltered Stock Movement row(s) (probe company={probe_company_sm})")
+
+			filtered = run_report("FClist Stock Movement", filters={"companies": [probe_company_sm]})
+			filtered_rows = filtered.get("result") if isinstance(filtered, dict) else None
+			filtered_n = len(filtered_rows) if isinstance(filtered_rows, list) else 0
+			record("companies_filter:stock_movement_confines", filtered_n <= unfiltered_n,
+				f"filtered={filtered_n} <= unfiltered={unfiltered_n}")
+	except Exception as e:  # noqa: BLE001
+		record("companies_filter:stock_movement_confines", False, f"{type(e).__name__}: {e}")
+
+	# --- (9c) Wave-2 cost_center-leg: FClist Payments — Payment Entry DOES carry a header cost_center
+	# field (the bench fact that overturned this report's wave-1 exclusion), so prove the NEW `cost_center`
+	# MultiSelectList list-arg also CONFINES. Unlike 9/9b, a real site may legitimately have ZERO Payment
+	# Entries stamped against the probe Cost Centre (cost_center is optional on Payment Entry) — that is
+	# NOT a defect, so this leg does NOT assert filtered-nonempty; it only asserts the confinement
+	# inequality and records the vacuous case honestly in the detail string rather than masking it.
+	# ----------------------------------------------------------------------------------------------
+	try:
+		probe_cc = frappe.db.get_value("Cost Center", {}, "name", order_by="creation asc")
+		if not probe_cc:
+			record("cost_center_filter:payments_confines", False,
+				"no Cost Center exists on this site to probe with")
+		else:
+			unfiltered = run_report("FClist Payments", filters={})
+			unfiltered_rows = unfiltered.get("result") if isinstance(unfiltered, dict) else None
+			unfiltered_n = len(unfiltered_rows) if isinstance(unfiltered_rows, list) else 0
+			record("cost_center_filter:payments_unfiltered_nonempty", unfiltered_n > 0,
+				f"{unfiltered_n} unfiltered Payments row(s) (probe cost center={probe_cc})")
+
+			filtered = run_report("FClist Payments", filters={"cost_center": [probe_cc]})
+			filtered_rows = filtered.get("result") if isinstance(filtered, dict) else None
+			filtered_n = len(filtered_rows) if isinstance(filtered_rows, list) else 0
+			vacuous_note = (
+				"" if filtered_n > 0 else
+				" (0 rows — no Payment Entry on this site carries this cost centre;"
+				" confinement still holds vacuously, honestly noted rather than masked)"
+			)
+			record("cost_center_filter:payments_confines", filtered_n <= unfiltered_n,
+				f"filtered={filtered_n} <= unfiltered={unfiltered_n}{vacuous_note}")
+	except Exception as e:  # noqa: BLE001
+		record("cost_center_filter:payments_confines", False, f"{type(e).__name__}: {e}")
 
 	# ----------------------------------------------------------------------------------------------
 	# Roll-up + numbered PASS/FAIL print.

@@ -9,17 +9,17 @@ query runs through frappe.get_list → read permission is checked and User Permi
 No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
 
-Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
 fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
-Link. No Cost Centre filter this wave — Payment Entry carries no header cost_center field (unlike GL
-Entry / Sales-Purchase/POS Invoice), so adding one here would need a rewrite (join to GL Entry by
-voucher), which is explicitly out of scope for this pass — see the yokoten applicability table.
+Link. `cost_center` filters Payment Entry's own header `cost_center` field — bench-proven present on
+Payment Entry (overturning this report's wave-1 exclusion note, which assumed no header field existed).
+No join/rewrite needed: the resolved list goes straight into the same `pe_filters` dict as `company`.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt
 
-from fclists.nav_options import resolve_companies_filter
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -46,6 +46,9 @@ def _data(filters):
 	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
 	if companies:
 		pe_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		pe_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("mode_of_payment"):
 		pe_filters["mode_of_payment"] = filters.mode_of_payment
 	if filters.get("party"):

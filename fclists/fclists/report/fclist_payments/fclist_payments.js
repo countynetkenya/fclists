@@ -1,7 +1,7 @@
 // FClist Payments — payments RECEIVED board filters. QBO-POS "Received Payments" parity.
-// Companies (2026-07-17): tree-checkbox MultiSelectList yokoten — see fclist_gl.js's header comment for
-// the full pattern-source note. No Cost Centre filter here — Payment Entry carries no header cost_center
-// field this wave (see fclist_payments.py's docstring).
+// Companies / Cost Centre (2026-07-17): tree-checkbox MultiSelectList yokoten — see fclist_gl.js's header
+// comment for the full pattern-source note. Cost Centre now wired too — Payment Entry DOES carry a header
+// cost_center field (bench-proven), overturning this report's wave-1 exclusion.
 frappe.query_reports["FClist Payments"] = {
 	filters: [
 		{
@@ -20,6 +20,19 @@ frappe.query_reports["FClist Payments"] = {
 			fieldtype: "Link",
 			options: "Company",
 			default: frappe.defaults.get_user_default("Company"),
+		},
+		{
+			fieldname: "cost_center",
+			label: __("Cost Centre"),
+			fieldtype: "MultiSelectList",
+			get_data: function (txt) {
+				return frappe
+					.call({
+						method: "fclists.nav_options.cost_centre_tree_options",
+						args: { txt: txt, companies: frappe.query_report.get_filter_value("companies") },
+					})
+					.then((r) => r.message);
+			},
 		},
 		fclists.periods.filter_def(),
 		{

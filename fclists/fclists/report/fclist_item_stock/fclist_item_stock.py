@@ -13,10 +13,20 @@ Invoice ONLY when the user holds read permission on it (Stock roles without it s
 
 v16-safe: sums are done in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query passes
 an explicit order_by. Sector-neutral (no client literal); gated by site_config fclists_enabled (default on).
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. Bin carries no company column, so the resolved list is joined the same way the single `company`
+filter always was — via the Warehouse.company lookup — now with an `["in", companies]` filter on
+Warehouse instead of a single equality; the velocity sub-query (`_units_sold`, over Sales Invoice, which
+DOES carry company) uses the same resolved list directly. No Cost Centre filter this wave — Bin/Item are
+not cost-centre attributed; out of scope per the yokoten applicability table.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, cint, add_days, nowdate
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -71,15 +81,16 @@ def _data(filters):
 	# to SQL when an item_group filter has actually NARROWED the set — with no narrowing filter the
 	# permitted set is "every enabled stock item", and on a large catalog that IN list is a
 	# multi-megabyte query; fetching Bin unfiltered and intersecting in Python is strictly cheaper.
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
 	bin_filters = {}
 	if filters.get("item_group"):
 		bin_filters["item_code"] = ["in", item_codes]
 	if filters.get("warehouse"):
 		bin_filters["warehouse"] = filters.warehouse
-	elif filters.get("company"):
-		# Bin has no company column — scope by the warehouses that belong to the company (name lookup).
+	elif companies:
+		# Bin has no company column — scope by the warehouses that belong to the resolved companies.
 		allowed = [w.name for w in frappe.get_all(
-			"Warehouse", filters={"company": filters.company}, fields=["name"], order_by="name asc"
+			"Warehouse", filters={"company": ["in", companies]}, fields=["name"], order_by="name asc"
 		)]
 		if not allowed:
 			return []
@@ -132,7 +143,7 @@ def _data(filters):
 			selling.setdefault(p.item_code, flt(p.price_list_rate))
 
 	# --- velocity: units sold in the last N days from submitted Sales Invoice lines -------------------
-	units_sold = _units_sold(filters, item_codes)
+	units_sold = _units_sold(filters, companies, item_codes)
 
 	# --- assemble ------------------------------------------------------------------------------------
 	# valuation per item = weighted (stock_value / on_hand) when qty > 0, else fall back to any bin rate.
@@ -185,7 +196,7 @@ def _selling_price_list(filters):
 	return rows[0].name if rows else None
 
 
-def _units_sold(filters, item_codes):
+def _units_sold(filters, companies, item_codes):
 	# Cross-module enrichment: the Report doc admits Stock roles, which natively lack Sales Invoice
 	# read — degrade velocity to 0 for them rather than leak (or hard-error on) sales rows.
 	if not frappe.has_permission("Sales Invoice"):
@@ -193,8 +204,8 @@ def _units_sold(filters, item_codes):
 	days = cint(filters.get("window_days")) or 30
 	from_date = add_days(nowdate(), -days)
 	si_filters = {"docstatus": 1, "posting_date": [">=", from_date], "is_return": 0}
-	if filters.get("company"):
-		si_filters["company"] = filters.company
+	if companies:
+		si_filters["company"] = ["in", companies]
 	# permission-checked (get_list): role read-perm + User Permissions scope the invoice set; the
 	# child-line get_all below is scoped to these permitted parents.
 	invoices = frappe.get_list(

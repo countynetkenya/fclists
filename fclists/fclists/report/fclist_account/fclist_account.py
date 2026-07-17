@@ -13,10 +13,21 @@ build_match_conditions needed.
 
 v16-safe: balances are summed in PYTHON (frappe.get_all rejects "sum(x) as y" field strings); every query
 passes an explicit order_by (tree order via lft, then name). Sector-neutral (no client literal).
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link, scoping BOTH which accounts are listed (Account.company) and the GL Entry balance sum
+(GL Entry.company). `cost_center` has no meaning on the Account master itself (an account is not tied to
+a cost centre) — it instead scopes the LIVE BALANCE computation: passing one or more Cost Centres restricts
+the GL Entry sum that produces each row's `balance` to those cost centres, while the account ROWS shown stay
+governed by `companies` alone. This is a deliberate, clean query-shape fit (GL Entry already carries
+cost_center; no join/rewrite needed) — same idiom as fclist_gl.py's leaf-table filter.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, nowdate
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -38,8 +49,9 @@ def _columns():
 
 def _data(filters):
 	acc_filters = {}
-	if filters.get("company"):
-		acc_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		acc_filters["company"] = ["in", companies]
 	if filters.get("root_type"):
 		acc_filters["root_type"] = filters.root_type
 
@@ -56,7 +68,7 @@ def _data(filters):
 	if not accounts:
 		return []
 
-	balances = _balances(filters, [a.name for a in accounts])
+	balances = _balances(filters, companies, [a.name for a in accounts])
 
 	rows = []
 	for a in accounts:
@@ -72,11 +84,14 @@ def _data(filters):
 	return rows
 
 
-def _balances(filters, account_names):
+def _balances(filters, companies, account_names):
 	"""Balance per account = SUM(debit) - SUM(credit) from GL Entry, as-of date, summed in PYTHON."""
 	gle_filters = {"account": ["in", account_names], "is_cancelled": 0}
-	if filters.get("company"):
-		gle_filters["company"] = filters.company
+	if companies:
+		gle_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		gle_filters["cost_center"] = ["in", cost_centers]
 	as_of = filters.get("as_of_date") or nowdate()
 	gle_filters["posting_date"] = ["<=", as_of]
 

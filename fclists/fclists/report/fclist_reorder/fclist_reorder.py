@@ -8,10 +8,19 @@ Security (Finding B): role-gated on the Report doc. The row-driving Item query r
 frappe.get_list → read permission is checked and User Permissions scope the rows; reorder-level and
 on-hand lookups are keyed to those already-permitted items only.
 v16-safe: sums in PYTHON; explicit order_by. Sector-neutral; gated by site_config fclists_enabled.
+
+Companies (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link. Bin carries no company column, so the resolved list is joined the same way the single `company`
+filter always was — via the Warehouse.company lookup, now with an `["in", companies]` filter. No Cost
+Centre filter this wave — Bin/Item are not cost-centre attributed; out of scope per the yokoten
+applicability table.
 """
 import frappe
 from frappe import _
 from frappe.utils import flt, cint
+
+from fclists.nav_options import resolve_companies_filter
 
 
 def execute(filters=None):
@@ -82,12 +91,13 @@ def _data(filters):
 
 	# --- on-hand from Bin, aggregated per item in PYTHON ---------------------------------------------
 	# get_all here is safe: scoped to the permitted item codes from the get_list above.
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
 	bin_filters = {"item_code": ["in", list(items.keys())]}
 	if filters.get("warehouse"):
 		bin_filters["warehouse"] = filters.warehouse
-	elif filters.get("company"):
+	elif companies:
 		allowed = [w.name for w in frappe.get_all(
-			"Warehouse", filters={"company": filters.company}, fields=["name"], order_by="name asc"
+			"Warehouse", filters={"company": ["in", companies]}, fields=["name"], order_by="name asc"
 		)]
 		if not allowed:
 			return []

@@ -20,12 +20,18 @@ row-driving Sales Invoice query runs through frappe.get_list → read permission
 Permissions scope the rows; the tender child rows are read only for those already-permitted invoices.
 No raw SQL, so no build_match_conditions needed.
 v16-safe: explicit order_by; read-only; no grouped-sum field strings.
+
+Companies / Cost Centre (2026-07-17 tree-checkbox yokoten — see fclists.nav_options, thin copy of
+fcbi/fcbi/consolidate.py's pattern): `companies` MultiSelectList wins over the legacy single `company`
+Link; `cost_center` filters Sales Invoice's own header cost_center field.
 """
 import re
 
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+from fclists.nav_options import resolve_companies_filter, resolve_cost_centre_filter
 
 
 def execute(filters=None):
@@ -76,8 +82,12 @@ def _columns(modes=None):
 
 def _data(filters):
 	si_filters = {"docstatus": 1}
-	if filters.get("company"):
-		si_filters["company"] = filters.company
+	companies = resolve_companies_filter(filters.get("companies"), filters.get("company"))
+	if companies:
+		si_filters["company"] = ["in", companies]
+	cost_centers = resolve_cost_centre_filter(filters.get("cost_center"))
+	if cost_centers:
+		si_filters["cost_center"] = ["in", cost_centers]
 	if filters.get("from_date") and filters.get("to_date"):
 		si_filters["posting_date"] = ["between", [filters.from_date, filters.to_date]]
 	elif filters.get("from_date"):
